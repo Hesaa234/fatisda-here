@@ -8,6 +8,7 @@ Dokumen perencanaan lengkap (acuan bersama tim): lihat `docs/` atau tautan yang 
 
 ## Struktur repo
 
+```text
 fatisda-here/
 ├── app/src/main/java/com/fatisdahere/app/
 │   ├── positioning/   KNN + aturan dua lapis (Kotlin murni, tanpa dependensi Android)
@@ -19,6 +20,7 @@ fatisda-here/
 ├── app/src/test/                  unit test positioning
 ├── tools/data/                    Excel mentah, notebook & skrip Python
 └── docs/                          ERD, wireframe, diagram, laporan
+```
 
 Package aplikasi: `com.fatisdahere.app`
 
@@ -29,11 +31,3 @@ Package aplikasi: `com.fatisdahere.app`
 - Perubahan struktur data (bagian 9) atau kontrak modul (bagian 10) **ditulis di dokumen dulu**, baru kodenya.
 - Saat memakai AI: tempelkan dokumen perencanaan sebagai konteks; kode hasil AI tetap dijalankan dan dicek sebelum PR.
 - **`google-services.json` tidak di-commit** — dibagikan lewat grup.
-
-## Minggu 1 (status)
-
-- [ ] fingerprint_v1.json + heatmap RSSI — Andrew
-- [ ] Wireframe layar Must — Rofiq
-- [ ] ERD — Jauhar
-- [x] Setup repo + proyek Firebase — Hesa
-- [ ] Aplikasi testing KNN (scan, tebak ruangan, uji 3 ruangan + video) — Nopal
