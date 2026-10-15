@@ -1,0 +1,33 @@
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+
+# Firebase — JANGAN di-commit (aturan bagian 12: dibagikan via grup)
+google-services.json
+service-account*.json
+*.keystore
+*.jks
+
+# Python / notebook (tools/data)
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+
+# Node (kalau ada)
+node_modules/
+
+# Lain-lain
+.env
+.DS_Store
