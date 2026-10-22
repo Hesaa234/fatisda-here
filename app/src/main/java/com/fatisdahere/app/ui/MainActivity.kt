@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.fatisdahere.app.ui.auth.LoginScreen
+import com.fatisdahere.app.ui.dosen.DosenApp
 import com.fatisdahere.app.ui.mahasiswa.*
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.*
@@ -17,6 +18,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // true = tes halaman dosen, false = tampilan mahasiswa
+            val modeDosen = true
+
             var currentScreen by remember { mutableStateOf("home") }
             var isLoggedIn by remember { mutableStateOf(false) }
 
@@ -49,105 +53,109 @@ class MainActivity : ComponentActivity() {
             )
 
             // Mengatur Tombol Back HP
-            BackHandler(enabled = currentScreen != "home") {
+            BackHandler(enabled = !modeDosen && currentScreen != "home") {
                 currentScreen = "home"
             }
 
-            Surface(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when (currentScreen) {
-                    // 1. BERANDA / HOME
-                    "home" -> StudentHomeScreen(
-                        userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
-                        activeSession = sampleActiveSession,
-                        courses = sampleCourses,
-                        onAbsenClick = {
-                            currentScreen = "scanning"
-                        },
-                        onCourseClick = { course ->
-                            selectedCourse = course
-                            currentScreen = "course_detail"
-                        },
-                        onProfileClick = {
-                            if (isLoggedIn) {
-                                currentScreen = "profile"
-                            } else {
-                                currentScreen = "login"
+            if (modeDosen) {
+                DosenApp()
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    when (currentScreen) {
+                        // 1. BERANDA / HOME
+                        "home" -> StudentHomeScreen(
+                            userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
+                            activeSession = sampleActiveSession,
+                            courses = sampleCourses,
+                            onAbsenClick = {
+                                currentScreen = "scanning"
+                            },
+                            onCourseClick = { course ->
+                                selectedCourse = course
+                                currentScreen = "course_detail"
+                            },
+                            onProfileClick = {
+                                if (isLoggedIn) {
+                                    currentScreen = "profile"
+                                } else {
+                                    currentScreen = "login"
+                                }
                             }
-                        }
-                    )
+                        )
 
-                    // 2. SCANNING / PRESENSI
-                    "scanning" -> ScanningScreen(
-                        userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
-                        session = sampleActiveSession,
-                        wifiName = "UNS-WiFi",
-                        onProfileClick = {
-                            if (isLoggedIn) {
-                                currentScreen = "profile"
-                            } else {
-                                currentScreen = "login"
+                        // 2. SCANNING / PRESENSI
+                        "scanning" -> ScanningScreen(
+                            userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
+                            session = sampleActiveSession,
+                            wifiName = "UNS-WiFi",
+                            onProfileClick = {
+                                if (isLoggedIn) {
+                                    currentScreen = "profile"
+                                } else {
+                                    currentScreen = "login"
+                                }
+                            },
+                            onBack = {
+                                currentScreen = "home"
                             }
-                        },
-                        onBack = {
-                            currentScreen = "home"
-                        }
-                    )
+                        )
 
-                    // 3. HASIL PRESENSI / RESULT
-                    "result" -> ResultScreen(
-                        userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
-                        session = sampleActiveSession,
-                        selectedType = AttendanceStatus.Hadir,
-                        state = ResultState.Verified,
-                        onRetryClick = {
-                            currentScreen = "scanning"
-                        },
-                        onDoneClick = {
-                            currentScreen = "home"
-                        }
-                    )
+                        // 3. HASIL PRESENSI / RESULT
+                        "result" -> ResultScreen(
+                            userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
+                            session = sampleActiveSession,
+                            selectedType = AttendanceStatus.Hadir,
+                            state = ResultState.Verified,
+                            onRetryClick = {
+                                currentScreen = "scanning"
+                            },
+                            onDoneClick = {
+                                currentScreen = "home"
+                            }
+                        )
 
-                    // 4. DETAIL MATA KULIAH
-                    "course_detail" -> StudentCourseDetailScreen(
-                        userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
-                        session = selectedCourse ?: sampleActiveSession,
-                        currentStatus = AttendanceStatus.Hadir,
-                        canAbsen = true,
-                        history = sampleRecords,
-                        onAbsenClick = {
-                            currentScreen = "scanning"
-                        },
-                        onBack = {
-                            currentScreen = "home"
-                        }
-                    )
+                        // 4. DETAIL MATA KULIAH
+                        "course_detail" -> StudentCourseDetailScreen(
+                            userName = if (isLoggedIn) "Mahasiswa Fatisda" else "Tamu",
+                            session = selectedCourse ?: sampleActiveSession,
+                            currentStatus = AttendanceStatus.Hadir,
+                            canAbsen = true,
+                            history = sampleRecords,
+                            onAbsenClick = {
+                                currentScreen = "scanning"
+                            },
+                            onBack = {
+                                currentScreen = "home"
+                            }
+                        )
 
-                    // 5. LOGIN SCREEN
-                    "login" -> LoginScreen(
-                        email = email,
-                        password = password,
-                        onEmailChange = { email = it },
-                        onPasswordChange = { password = it },
-                        onLoginClick = {
-                            isLoggedIn = true
-                            currentScreen = "home"
-                        }
-                    )
+                        // 5. LOGIN SCREEN
+                        "login" -> LoginScreen(
+                            email = email,
+                            password = password,
+                            onEmailChange = { email = it },
+                            onPasswordChange = { password = it },
+                            onLoginClick = {
+                                isLoggedIn = true
+                                currentScreen = "home"
+                            }
+                        )
 
-                    // 6. PROFILE SCREEN
-                    "profile" -> StudentProfileScreen(
-                        name = "Mahasiswa Fatisda",
-                        nim = "L200220000",
-                        onLogoutClick = {
-                            isLoggedIn = false
-                            currentScreen = "login"
-                        },
-                        onBack = {
-                            currentScreen = "home"
-                        }
-                    )
+                        // 6. PROFILE SCREEN
+                        "profile" -> StudentProfileScreen(
+                            name = "Mahasiswa Fatisda",
+                            nim = "L200220000",
+                            onLogoutClick = {
+                                isLoggedIn = false
+                                currentScreen = "login"
+                            },
+                            onBack = {
+                                currentScreen = "home"
+                            }
+                        )
+                    }
                 }
             }
         }
