@@ -8,16 +8,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.fatisdahere.app.di.AppContainer
 import com.fatisdahere.app.ui.auth.LoginScreen
+import com.fatisdahere.app.ui.debug.DebugPositioningScreen
 import com.fatisdahere.app.ui.dosen.DosenApp
 import com.fatisdahere.app.ui.mahasiswa.*
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.*
 
 class MainActivity : ComponentActivity() {
+    private val container by lazy { AppContainer(applicationContext) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // true = buka layar debug positioning (X-01), mengabaikan modeDosen
+            val modeDebug = false
             // true = tes halaman dosen, false = tampilan mahasiswa
             val modeDosen = true
 
@@ -57,7 +63,16 @@ class MainActivity : ComponentActivity() {
                 currentScreen = "home"
             }
 
-            if (modeDosen) {
+            if (modeDebug) {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    DebugPositioningScreen(
+                        fingerprint = container.fingerprint,
+                        engine = container.positioningEngine,
+                        params = container.positioningParams,
+                        scanner = container.wifiScanner,
+                    )
+                }
+            } else if (modeDosen) {
                 DosenApp()
             } else {
                 Surface(
