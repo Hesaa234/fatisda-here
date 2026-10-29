@@ -1,200 +1,101 @@
 package com.fatisdahere.app.ui.dosen
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fatisdahere.app.ui.components.*
+import com.fatisdahere.app.ui.theme.*
 
-private val SectionBg = Color(0xFFEBEBEB)
-private val CardBorder = Color(0xFF1C1C1C)
-
-enum class StatusHadir(val label: String) {
-    Hadir("Hadir"),
-    Izin("Izin"),
-    Sakit("Sakit"),
-    Alpa("Alpa")
-}
-
-/** manual = true jika statusnya diubah dosen; false = hasil verifikasi otomatis */
-data class CatatanKehadiran(
-    val nama: String,
-    val nim: String,
-    val status: StatusHadir,
-    val manual: Boolean = false
+/** Status yang bisa dipilih dosen. Belum Absen tidak bisa dipilih. */
+private val PilihanStatus = listOf(
+    AttendanceStatus.Hadir, AttendanceStatus.Izin, AttendanceStatus.Sakit, AttendanceStatus.Alpa
 )
 
+/**
+ * @param riwayat pertemuan, terbaru di atas
+ * @param catatanUntuk daftar status mahasiswa untuk satu pertemuan
+ */
 @Composable
 fun RekapKehadiran(
-    username: String = "Username",
+    username: String,
     matkul: MataKuliah,
     riwayat: List<Pertemuan>,
     catatanUntuk: (Pertemuan) -> List<CatatanKehadiran>,
-    onUbahStatus: (pertemuan: Pertemuan, nim: String, status: StatusHadir) -> Unit = { _, _, _ -> }
+    onUbahStatus: (pertemuan: Pertemuan, uid: String, status: AttendanceStatus) -> Unit,
+    onBack: () -> Unit,
+    onProfileClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var dipilih by remember { mutableStateOf(riwayat.firstOrNull()) }
-    var dropdownTerbuka by remember { mutableStateOf(false) }
-
-    val pertemuan = dipilih
+    // Disimpan sebagai sessionId supaya pilihan tetap sama setelah data dimuat ulang
+    var dipilihId by remember { mutableStateOf(riwayat.firstOrNull()?.sessionId) }
+    val pertemuan = riwayat.firstOrNull { it.sessionId == dipilihId } ?: riwayat.firstOrNull()
     val catatan = if (pertemuan != null) catatanUntuk(pertemuan) else emptyList()
+    val label = { p: Pertemuan -> "Pertemuan ${p.nomor} · ${p.tanggal}" }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-    ) {
-        HeaderBeranda(username)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    Scaffold(
+        modifier,
+        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        containerColor = PageBackground
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ===== Pilih pertemuan + ringkasan =====
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SectionBg)
-                    .padding(16.dp)
-            ) {
-                Text("Rekap Kehadiran", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "(${matkul.kode}) - ${matkul.nama}",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("Pertemuan", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-                        .clickable(enabled = riwayat.isNotEmpty()) {
-                            dropdownTerbuka = !dropdownTerbuka
-                        }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = pertemuan?.let { "Pertemuan ${it.nomor} · ${it.tanggal}" }
-                            ?: "Belum ada pertemuan",
-                        fontSize = 16.sp
-                    )
-                    Text(if (dropdownTerbuka) "▲" else "▼", fontSize = 14.sp)
-                }
-
-                if (dropdownTerbuka) {
-                    Spacer(Modifier.height(8.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White)
-                            .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-                    ) {
-                        riwayat.forEachIndexed { i, p ->
-                            if (i > 0) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(1.dp)
-                                        .background(Color(0xFFD9D9D9))
-                                )
-                            }
-                            Text(
-                                text = "Pertemuan ${p.nomor} · ${p.tanggal}",
-                                fontSize = 16.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        dipilih = p
-                                        dropdownTerbuka = false
-                                    }
-                                    .padding(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    StatusHadir.values().forEach { s ->
-                        val jumlah = catatan.count { it.status == s }
-                        Text(
-                            text = buildAnnotatedString {
-                                append("${s.label} ")
-                                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$jumlah") }
-                            },
-                            fontSize = 15.sp
+            item {
+                SectionCard("Rekap Kehadiran") {
+                    Text(matkul.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FieldLabel("Pertemuan")
+                        SelectField(
+                            value = pertemuan?.let(label),
+                            placeholder = "Belum ada pertemuan",
+                            options = riwayat.map(label),
+                            onSelect = { dipilihId = riwayat[it].sessionId },
+                            enabled = riwayat.isNotEmpty()
                         )
+                    }
+                    val ringkasan = PilihanStatus + listOfNotNull(
+                        AttendanceStatus.BelumAbsen.takeIf { s -> catatan.any { it.status == s } }
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        ringkasan.forEach { s ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "${catatan.count { it.status == s }}",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = readableColor(s.color)
+                                )
+                                Text(s.label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f))
+                            }
+                        }
                     }
                 }
             }
-
-            // ===== Daftar mahasiswa =====
             if (pertemuan != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(SectionBg)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (catatan.isEmpty()) {
-                        Text("Belum ada peserta.", fontSize = 14.sp)
-                    }
-                    catatan.forEach { c ->
-                        KartuCatatan(c) { statusBaru -> onUbahStatus(pertemuan, c.nim, statusBaru) }
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    Text(
+                item { SectionTitle("Daftar Mahasiswa") }
+                if (catatan.isEmpty()) item { HelperText("Belum ada peserta.") }
+                items(catatan) { c ->
+                    KartuCatatan(c) { statusBaru -> onUbahStatus(pertemuan, c.uid, statusBaru) }
+                }
+                item {
+                    HelperText(
                         "Status hasil verifikasi otomatis tertulis \"auto\"; " +
-                                "perubahan oleh dosen tercatat sebagai \"manual\".",
-                        fontSize = 13.sp,
-                        color = Color(0xFF404040)
+                            "perubahan oleh dosen tercatat sebagai \"manual\"."
                     )
                 }
             }
@@ -203,55 +104,43 @@ fun RekapKehadiran(
 }
 
 @Composable
-private fun KartuCatatan(c: CatatanKehadiran, onUbah: (StatusHadir) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(c.nama, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${c.nim} · ${if (c.manual) "manual" else "auto"}",
-                fontSize = 13.sp
-            )
+private fun KartuCatatan(c: CatatanKehadiran, onUbah: (AttendanceStatus) -> Unit) {
+    ItemCard {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ItemTitle(c.nama)
+            ItemSubtitle("${c.nim} · ${if (c.manual) "manual" else "auto"}")
         }
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(12.dp))
         PilihStatus(c.status, onUbah)
     }
 }
 
 @Composable
-private fun PilihStatus(status: StatusHadir, onPilih: (StatusHadir) -> Unit) {
+private fun PilihStatus(status: AttendanceStatus, onPilih: (AttendanceStatus) -> Unit) {
     var terbuka by remember { mutableStateOf(false) }
     Box {
-        Row(
+        Surface(
             modifier = Modifier
-                .width(110.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White)
-                .border(2.dp, CardBorder, RoundedCornerShape(14.dp))
-                .clickable { terbuka = true }
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .clip(RoundedCornerShape(50))
+                .clickable { terbuka = true },
+            shape = RoundedCornerShape(50),
+            color = status.color.copy(alpha = 0.15f)
         ) {
-            Text(status.label, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text("▼", fontSize = 12.sp)
+            Row(
+                Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(status.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = readableColor(status.color))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Ubah status", tint = readableColor(status.color))
+            }
         }
         DropdownMenu(expanded = terbuka, onDismissRequest = { terbuka = false }) {
-            StatusHadir.values().forEach { s ->
+            PilihanStatus.forEach { s ->
                 DropdownMenuItem(
                     text = { Text(s.label) },
                     onClick = {
-                        onPilih(s)
                         terbuka = false
+                        if (s != status) onPilih(s)
                     }
                 )
             }
@@ -261,18 +150,22 @@ private fun PilihStatus(status: StatusHadir, onPilih: (StatusHadir) -> Unit) {
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 760)
 @Composable
-fun RekapKehadiranPreview() {
-    val p = Pertemuan(8, 2, 4, "16 Okt 2026", "13:00 - 15:00")
-    RekapKehadiran(
-        matkul = MataKuliah("IF301", "Pemrograman Mobile", "Lab 3", 4),
-        riwayat = listOf(p),
-        catatanUntuk = {
-            listOf(
-                CatatanKehadiran("Andi Pratama", "L200220001", StatusHadir.Hadir),
-                CatatanKehadiran("Budi Santoso", "L200220002", StatusHadir.Hadir),
-                CatatanKehadiran("Citra Lestari", "L200220003", StatusHadir.Izin, manual = true),
-                CatatanKehadiran("Dewi Anggraini", "L200220004", StatusHadir.Alpa)
-            )
-        }
-    )
+private fun RekapKehadiranPreview() {
+    val p = Pertemuan(3, 2, 4, "16 Okt 2026", "13:00 - 15:00")
+    FatisdaTheme {
+        RekapKehadiran(
+            username = "Dosen",
+            matkul = MataKuliah("WMC-A", "Wireless & Mobile Computing", "LAB 2 UPT", 4),
+            riwayat = listOf(p),
+            catatanUntuk = {
+                listOf(
+                    CatatanKehadiran("Andi Pratama", "M0523001", AttendanceStatus.Hadir),
+                    CatatanKehadiran("Budi Santoso", "M0523002", AttendanceStatus.Hadir),
+                    CatatanKehadiran("Citra Lestari", "M0523003", AttendanceStatus.Izin, manual = true),
+                    CatatanKehadiran("Dewi Anggraini", "M0523004", AttendanceStatus.Alpa)
+                )
+            },
+            onUbahStatus = { _, _, _ -> }, onBack = {}, onProfileClick = {}
+        )
+    }
 }
