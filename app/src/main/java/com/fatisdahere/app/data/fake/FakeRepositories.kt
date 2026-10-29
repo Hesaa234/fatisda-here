@@ -9,6 +9,7 @@ import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.AuthRepository
 import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.CourseRepository
+import com.fatisdahere.app.data.NewAccount
 import com.fatisdahere.app.data.PresenceStatus
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
@@ -54,6 +55,32 @@ class FakeUserRepository(private val db: FakeDatabase) : UserRepository {
         simulasiJaringan()
         return db.users.filter { it.role == Role.MAHASISWA }
     }
+
+    override suspend fun allUsers(): List<AppUser> {
+        simulasiJaringan()
+        return db.users.toList()
+    }
+
+    override suspend fun createAccount(account: NewAccount): Result<AppUser> {
+        simulasiJaringan()
+        val email = account.email.trim().lowercase()
+        if (db.users.any { it.email.lowercase() == email }) {
+            return Result.failure(IllegalArgumentException("Email sudah dipakai akun lain."))
+        }
+        if (account.password.length < 6) {
+            return Result.failure(IllegalArgumentException("Kata sandi minimal 6 karakter."))
+        }
+        val user = AppUser(
+            uid = "user${db.users.size + 1}",
+            name = account.name.trim(),
+            email = email,
+            role = account.role,
+            nim = account.nim,
+            nip = account.nip,
+        )
+        db.users += user
+        return Result.success(user)
+    }
 }
 
 class FakeRoomRepository(private val db: FakeDatabase) : RoomRepository {
@@ -72,6 +99,11 @@ class FakeCourseRepository(private val db: FakeDatabase) : CourseRepository {
     override suspend fun coursesForLecturer(uid: String): List<Course> {
         simulasiJaringan()
         return db.courses.filter { it.lecturerId == uid }
+    }
+
+    override suspend fun allCourses(): List<Course> {
+        simulasiJaringan()
+        return db.courses.toList()
     }
 
     override suspend fun addCourse(course: Course): Course {

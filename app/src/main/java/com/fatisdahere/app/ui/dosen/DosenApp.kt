@@ -16,6 +16,7 @@ import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 private enum class LayarDosen {
     BERANDA, PANTAU_SESI, TAMBAH_MATKUL, DETAIL_MATKUL, BUKA_SESI,
@@ -70,12 +71,23 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var versi by remember { mutableStateOf(0) } // dinaikkan setiap ada perubahan supaya data dimuat ulang
     var data by remember { mutableStateOf<DataDosen?>(null) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
+    var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(user.uid, versi) {
-        now = System.currentTimeMillis()
-        data = muatDataDosen(container, user.uid)
+        try {
+            now = System.currentTimeMillis()
+            data = muatDataDosen(container, user.uid)
+            galatMuat = null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            galatMuat = pesanGalat(e)
+        }
     }
+
+    galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
 
     // Di Pantau Sesi, daftar kehadiran diperbarui tiap 10 detik
     if (layar == LayarDosen.PANTAU_SESI) {
@@ -90,7 +102,13 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     /** Jalankan perubahan data, lalu muat ulang. */
     fun ubah(aksi: suspend () -> Unit) {
         scope.launch {
-            aksi()
+            try {
+                aksi()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                galatAksi = pesanGalat(e)
+            }
             versi++
         }
     }
@@ -108,8 +126,13 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     val d = data
     if (d == null) {
+        val pesan = galatMuat
         Scaffold(topBar = { FatisdaTopBar(user.name) }, containerColor = PageBackground) { padding ->
-            LoadingContent(padding)
+            if (pesan != null) {
+                ErrorContent(pesan, onRetry = { galatMuat = null; versi++ }, padding = padding, onLogout = onLogout)
+            } else {
+                LoadingContent(padding)
+            }
         }
         return
     }

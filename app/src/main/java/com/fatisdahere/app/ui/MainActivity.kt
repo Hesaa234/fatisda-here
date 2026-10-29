@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import com.fatisdahere.app.data.AppUser
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.di.AppContainer
-import com.fatisdahere.app.ui.admin.AdminScreen
+import com.fatisdahere.app.ui.admin.AdminApp
 import com.fatisdahere.app.ui.auth.LoginScreen
 import com.fatisdahere.app.ui.debug.DebugPositioningScreen
 import com.fatisdahere.app.ui.dosen.DosenApp
@@ -86,13 +86,14 @@ private fun FatisdaApp(container: AppContainer) {
             },
             isLoading = isLoading,
             errorMessage = error,
-            infoMessage = "Mode demo: masuk dengan mahasiswa1, dosen1, atau admin (kata sandi bebas)."
+            infoMessage = if (AppContainer.PAKAI_FIREBASE) null
+            else "Mode demo: masuk dengan mahasiswa1, dosen1, atau admin (kata sandi bebas)."
         )
     } else {
         when (u.role) {
             Role.MAHASISWA -> MahasiswaApp(u, container, logout)
             Role.DOSEN -> DosenApp(u, container, logout)
-            Role.ADMIN -> AdminScreen(u, logout)
+            Role.ADMIN -> AdminApp(u, container, logout)
         }
     }
 }
