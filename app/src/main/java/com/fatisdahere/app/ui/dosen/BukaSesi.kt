@@ -1,55 +1,36 @@
 package com.fatisdahere.app.ui.dosen
 
 import android.app.TimePickerDialog
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-
-private val SectionBg = Color(0xFFEBEBEB)
-private val CardBorder = Color(0xFF1C1C1C)
-private val Disabled = Color(0xFFD9D9D9)
-private val ErrorRed = Color(0xFFD32F2F)
+import com.fatisdahere.app.ui.components.*
+import com.fatisdahere.app.ui.theme.*
+import java.util.Calendar
 
 @Composable
 fun BukaSesi(
-    username: String = "Username",
+    username: String,
     daftarMatkul: List<MataKuliah>,
-    matkulAwal: MataKuliah? = null,
-    onBukaAbsensi: (matkul: MataKuliah, jamMulai: String, jamSelesai: String) -> Unit = { _, _, _ -> }
+    matkulAwal: MataKuliah?,
+    onBukaAbsensi: (matkul: MataKuliah, jamMulai: String, jamSelesai: String) -> Unit,
+    onBack: () -> Unit,
+    onProfileClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    // Default: mulai sekarang, selesai 2 jam lagi (paling lambat 23:59)
+    val (awalMulai, awalSelesai) = remember { jamDefault() }
     var terpilih by remember { mutableStateOf(matkulAwal) }
-    var dropdownTerbuka by remember { mutableStateOf(false) }
-    var jamMulai by remember { mutableStateOf("13:00") }
-    var jamSelesai by remember { mutableStateOf("15:00") }
+    var jamMulai by remember { mutableStateOf(awalMulai) }
+    var jamSelesai by remember { mutableStateOf(awalSelesai) }
     val context = LocalContext.current
 
     fun pilihJam(awal: String, onPilih: (String) -> Unit) {
@@ -66,176 +47,81 @@ fun BukaSesi(
     val jamValid = jamSelesai > jamMulai // format HH:mm, aman dibandingkan sebagai teks
     val bisaBuka = terpilih != null && jamValid
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-    ) {
-        HeaderBeranda(username)
-
+    Scaffold(
+        modifier,
+        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        containerColor = PageBackground
+    ) { padding ->
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(16.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SectionBg)
-                    .padding(16.dp)
-            ) {
-                Text("Buka Sesi Absen", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(16.dp))
-
-                // Mata kuliah
-                Label("Mata Kuliah")
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-                        .clickable { dropdownTerbuka = !dropdownTerbuka }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = terpilih?.let { "(${it.kode}) - ${it.nama}" } ?: "Pilih mata kuliah",
-                        fontSize = 16.sp,
-                        modifier = Modifier.weight(1f)
+            SectionCard("Buka Sesi Absen") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FieldLabel("Mata Kuliah")
+                    SelectField(
+                        value = terpilih?.judul,
+                        placeholder = "Pilih mata kuliah",
+                        options = daftarMatkul.map { it.judul },
+                        onSelect = { terpilih = daftarMatkul[it] }
                     )
-                    Text(if (dropdownTerbuka) "▲" else "▼", fontSize = 14.sp)
                 }
-                if (dropdownTerbuka) {
-                    Spacer(Modifier.height(8.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color.White)
-                            .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-                    ) {
-                        daftarMatkul.forEachIndexed { i, m ->
-                            if (i > 0) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(1.dp)
-                                        .background(Color(0xFFD9D9D9))
-                                )
-                            }
-                            Text(
-                                text = "(${m.kode}) - ${m.nama}",
-                                fontSize = 16.sp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        terpilih = m
-                                        dropdownTerbuka = false
-                                    }
-                                    .padding(16.dp)
-                            )
-                        }
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FieldLabel("Ruang (otomatis dari matkul)")
+                    ClickableField(terpilih?.ruang, "-", onClick = {}, enabled = false)
                 }
-
-                // Ruang (otomatis)
-                Spacer(Modifier.height(14.dp))
-                Label("Ruang (otomatis dari matkul)")
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Disabled)
-                        .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                ) {
-                    Text(terpilih?.ruang ?: "(Nama Ruang)", fontSize = 16.sp)
-                }
-
-                // Jam
-                Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Label("Jam Mulai")
-                        KotakJam(jamMulai) { pilihJam(jamMulai) { jamMulai = it } }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FieldLabel("Jam Mulai")
+                        ClickableField(
+                            jamMulai, "", onClick = { pilihJam(jamMulai) { jamMulai = it } },
+                            trailingIcon = Icons.Filled.Schedule
+                        )
                     }
-                    Column(Modifier.weight(1f)) {
-                        Label("Jam Selesai")
-                        KotakJam(jamSelesai) { pilihJam(jamSelesai) { jamSelesai = it } }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FieldLabel("Jam Selesai")
+                        ClickableField(
+                            jamSelesai, "", onClick = { pilihJam(jamSelesai) { jamSelesai = it } },
+                            trailingIcon = Icons.Filled.Schedule
+                        )
                     }
                 }
-
-                if (!jamValid) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Jam selesai harus setelah jam mulai.",
-                        fontSize = 13.sp,
-                        color = ErrorRed
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
+                if (!jamValid) ErrorText("Jam selesai harus setelah jam mulai.")
+                HelperText(
                     "Mahasiswa hanya bisa absen di antara jam mulai dan jam selesai. " +
-                            "Yang belum absen saat sesi berakhir tercatat Alpa.",
-                    fontSize = 13.sp,
-                    color = Color(0xFF404040)
+                        "Yang belum absen saat sesi berakhir tercatat Alpa."
                 )
-
-                Spacer(Modifier.height(16.dp))
-                Button(
+                PrimaryButton(
+                    "Buka Absensi",
                     onClick = { terpilih?.let { onBukaAbsensi(it, jamMulai, jamSelesai) } },
-                    enabled = bisaBuka,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = UnsBlue,
-                        contentColor = Color.White,
-                        disabledContainerColor = Disabled,
-                        disabledContentColor = Color.Black
-                    )
-                ) {
-                    Text("Buka Absensi", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
+                    enabled = bisaBuka
+                )
             }
         }
     }
 }
 
-@Composable
-private fun Label(teks: String) {
-    Text(teks, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(6.dp))
-}
-
-@Composable
-private fun KotakJam(jam: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White)
-            .border(2.dp, CardBorder, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(jam, fontSize = 16.sp)
-        Text("🕒", fontSize = 16.sp)
-    }
+private fun jamDefault(): Pair<String, String> {
+    val now = Calendar.getInstance()
+    val jam = now.get(Calendar.HOUR_OF_DAY)
+    val menit = now.get(Calendar.MINUTE)
+    val mulai = "%02d:%02d".format(jam, menit)
+    val selesaiMenit = minOf(jam * 60 + menit + 120, 23 * 60 + 59)
+    val selesai = "%02d:%02d".format(selesaiMenit / 60, selesaiMenit % 60)
+    return mulai to selesai
 }
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 760)
 @Composable
-fun BukaSesiPreview() {
+private fun BukaSesiPreview() {
     val matkul = listOf(
-        MataKuliah("IF301", "Pemrograman Mobile", "Lab 3", 25),
-        MataKuliah("IF302", "Kecerdasan Buatan", "R. 201", 30)
+        MataKuliah("WMC-A", "Wireless & Mobile Computing", "LAB 2 UPT", 25),
+        MataKuliah("JARKOM-A", "Jaringan Komputer", "B4.05", 30)
     )
-    BukaSesi(daftarMatkul = matkul, matkulAwal = matkul.first())
+    FatisdaTheme {
+        BukaSesi("Dosen", matkul, matkul.first(), { _, _, _ -> }, {}, {})
+    }
 }

@@ -1,18 +1,55 @@
 package com.fatisdahere.app.ui.dosen
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import com.fatisdahere.app.data.AppUser
+import com.fatisdahere.app.data.Attendance
+import com.fatisdahere.app.data.AttendanceMethod
+import com.fatisdahere.app.data.AttendanceSession
+import com.fatisdahere.app.data.Course
+import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Room
+import com.fatisdahere.app.di.AppContainer
+import com.fatisdahere.app.ui.components.*
+import com.fatisdahere.app.ui.theme.PageBackground
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 private enum class LayarDosen {
     BERANDA, PANTAU_SESI, TAMBAH_MATKUL, DETAIL_MATKUL, BUKA_SESI,
-    KELOLA_PESERTA, REKAP_KEHADIRAN, EDIT_MATKUL
+    KELOLA_PESERTA, REKAP_KEHADIRAN, EDIT_MATKUL, PROFIL
+}
+
+/** Semua data yang dibutuhkan halaman dosen, dimuat sekaligus dari repository. */
+private class DataDosen(
+    val courses: List<Course>,
+    val rooms: List<Room>,
+    val users: Map<String, AppUser>,
+    val semuaMahasiswa: List<AppUser>,
+    val sessions: Map<String, List<AttendanceSession>>, // courseId -> sesi, urut lama ke baru
+    val attendances: Map<String, List<Attendance>>, // sessionId -> kehadiran
+) {
+    fun namaRuang(id: String) = rooms.firstOrNull { it.id == id }?.name ?: id
+    fun hadir(sessionId: String) = attendances[sessionId].orEmpty().count { it.status == PresenceStatus.HADIR }
+    fun kehadiran(sessionId: String, uid: String) = attendances[sessionId]?.firstOrNull { it.studentId == uid }
+    fun pesertaDari(course: Course) = course.studentIds.mapNotNull { users[it] }
+}
+
+private suspend fun muatDataDosen(c: AppContainer, uid: String): DataDosen {
+    val courses = c.courseRepository.coursesForLecturer(uid).sortedBy { it.code }
+    val rooms = c.roomRepository.rooms()
+    val semuaMahasiswa = c.userRepository.students()
+    val users = c.userRepository.usersByIds(courses.flatMap { it.studentIds }).associateBy { it.uid }
+    val sessions = courses.associate { course ->
+        course.id to c.sessionRepository.sessionsOfCourse(course.id).sortedBy { it.startAtMs }
+    }
+    val attendances = c.attendanceRepository
+        .forSessions(sessions.values.flatten().map { it.id })
+        .groupBy { it.sessionId }
+    return DataDosen(courses, rooms, users, semuaMahasiswa, sessions, attendances)
 }
 
 /**
@@ -23,31 +60,57 @@ private enum class LayarDosen {
  *                          -> Rekap Kehadiran
  *                          -> Edit Matkul
  * Beranda -> Pantau Sesi -> (Tutup sesi) -> Beranda
+ * Header (nama di kanan atas) -> Profil -> Log Out
  *
- * Panggil dari MainActivity / NavHost: DosenApp()
- * Data di bawah masih dummy; ganti dengan data dari ViewModel/API.
+ * Data diambil dari repository di AppContainer (sekarang data dummy, nanti Firebase).
  */
 @Composable
-fun DosenApp(username: String = "Username") {
+fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var layar by rememberSaveable { mutableStateOf(LayarDosen.BERANDA) }
-    var kodeTerpilih by rememberSaveable { mutableStateOf<String?>(null) }
-    var sesiBerjalan by remember { mutableStateOf<SesiAktif?>(null) }
-    val kehadiran = remember { dummyKehadiran }
-    val daftarMatkul = remember { mutableStateListOf<MataKuliah>().apply { addAll(dummyMatkul) } }
+    var courseIdTerpilih by rememberSaveable { mutableStateOf<String?>(null) }
+    var versi by remember { mutableStateOf(0) } // dinaikkan setiap ada perubahan supaya data dimuat ulang
+    var data by remember { mutableStateOf<DataDosen?>(null) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
+    var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
+    val scope = rememberCoroutineScope()
 
-    // Peserta per matkul (key = kode matkul)
-    val pesertaMap = remember {
-        mutableStateMapOf<String, List<Peserta>>().apply {
-            dummyMatkul.forEach { put(it.kode, dummyMahasiswa.take(it.jumlahPeserta)) }
+    LaunchedEffect(user.uid, versi) {
+        try {
+            now = System.currentTimeMillis()
+            data = muatDataDosen(container, user.uid)
+            galatMuat = null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            galatMuat = pesanGalat(e)
         }
     }
-    // Perubahan status rekap yang sudah diedit dosen (key = "kode#nomorPertemuan")
-    val rekapMap = remember { mutableStateMapOf<String, List<CatatanKehadiran>>() }
 
-    fun setPeserta(kode: String, baru: List<Peserta>) {
-        pesertaMap[kode] = baru
-        val idx = daftarMatkul.indexOfFirst { it.kode == kode }
-        if (idx >= 0) daftarMatkul[idx] = daftarMatkul[idx].copy(jumlahPeserta = baru.size)
+    galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
+
+    // Di Pantau Sesi, daftar kehadiran diperbarui tiap 10 detik
+    if (layar == LayarDosen.PANTAU_SESI) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(10_000)
+                versi++
+            }
+        }
+    }
+
+    /** Jalankan perubahan data, lalu muat ulang. */
+    fun ubah(aksi: suspend () -> Unit) {
+        scope.launch {
+            try {
+                aksi()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                galatAksi = pesanGalat(e)
+            }
+            versi++
+        }
     }
 
     // Tombol back sistem: halaman di bawah Detail Matkul -> Detail Matkul, lainnya -> Beranda
@@ -61,180 +124,206 @@ fun DosenApp(username: String = "Username") {
         }
     }
 
-    val sesi = sesiBerjalan
-    val matkul = daftarMatkul.firstOrNull { it.kode == kodeTerpilih }
-    val pesertaMatkul: List<Peserta> = matkul?.let { pesertaMap[it.kode] } ?: emptyList()
+    val d = data
+    if (d == null) {
+        val pesan = galatMuat
+        Scaffold(topBar = { FatisdaTopBar(user.name) }, containerColor = PageBackground) { padding ->
+            if (pesan != null) {
+                ErrorContent(pesan, onRetry = { galatMuat = null; versi++ }, padding = padding, onLogout = onLogout)
+            } else {
+                LoadingContent(padding)
+            }
+        }
+        return
+    }
+
+    val keBeranda = { layar = LayarDosen.BERANDA }
+    val keDetail = { layar = LayarDosen.DETAIL_MATKUL }
+    val keProfil = { layar = LayarDosen.PROFIL }
+
+    // ---------- Data tampilan ----------
+    val daftarMatkul = d.courses.map {
+        MataKuliah(it.code, it.name, d.namaRuang(it.roomId), it.studentIds.size, it.id)
+    }
+    val sesiBerjalan = d.sessions.values.flatten().filter { it.isActive(now) }.minByOrNull { it.startAtMs }
+    val courseSesi = sesiBerjalan?.let { s -> d.courses.firstOrNull { it.id == s.courseId } }
+    val sesiAktif = if (sesiBerjalan != null && courseSesi != null) {
+        SesiAktif(
+            kodeMatkul = courseSesi.code,
+            namaMatkul = courseSesi.name,
+            waktu = formatRentangJam(sesiBerjalan.startAtMs, sesiBerjalan.endAtMs),
+            ruang = d.namaRuang(sesiBerjalan.roomId),
+            hadir = d.hadir(sesiBerjalan.id),
+            totalMahasiswa = courseSesi.studentIds.size,
+            sessionId = sesiBerjalan.id
+        )
+    } else null
+
+    val course = d.courses.firstOrNull { it.id == courseIdTerpilih }
+    val matkul = daftarMatkul.firstOrNull { it.id == courseIdTerpilih }
+    val riwayat: List<Pertemuan> = course?.let { c ->
+        d.sessions[c.id].orEmpty().mapIndexed { i, s ->
+            Pertemuan(
+                nomor = i + 1,
+                hadir = d.hadir(s.id),
+                total = c.studentIds.size,
+                tanggal = formatTanggal(s.startAtMs),
+                waktu = formatRentangJam(s.startAtMs, s.endAtMs),
+                sessionId = s.id
+            )
+        }.reversed()
+    } ?: emptyList()
+    val pesertaMatkul = course?.let { c ->
+        d.pesertaDari(c).map { Peserta(it.name, it.nim ?: "-", it.uid) }
+    } ?: emptyList()
 
     when {
-        layar == LayarDosen.PANTAU_SESI && sesi != null -> PantauSesi(
-            username = username,
-            sesi = sesi,
-            daftarKehadiran = kehadiran,
+        layar == LayarDosen.PROFIL -> ProfilDosen(
+            nama = user.name,
+            nip = user.nip ?: "-",
+            onLogout = onLogout,
+            onBack = keBeranda
+        )
+
+        layar == LayarDosen.PANTAU_SESI && sesiAktif != null && sesiBerjalan != null && courseSesi != null -> PantauSesi(
+            username = user.name,
+            sesi = sesiAktif,
+            daftarKehadiran = d.pesertaDari(courseSesi).map { u ->
+                val a = d.kehadiran(sesiBerjalan.id, u.uid)
+                KehadiranMahasiswa(
+                    nama = u.name,
+                    nim = u.nim ?: "-",
+                    status = a?.status?.toUi() ?: AttendanceStatus.BelumAbsen,
+                    jam = a?.let { formatJam(it.createdAtMs) }
+                )
+            },
             onTutupSesi = {
-                sesiBerjalan = null
+                ubah { container.sessionRepository.closeSession(sesiBerjalan.id, System.currentTimeMillis()) }
                 layar = LayarDosen.BERANDA
-            }
+            },
+            onBack = keBeranda,
+            onProfileClick = keProfil
         )
 
         layar == LayarDosen.TAMBAH_MATKUL -> TambahMatkul(
-            username = username,
-            daftarRuangan = dummyRuanganFingerprint,
-            kodeTerpakai = daftarMatkul.map { it.kode },
+            username = user.name,
+            daftarRuangan = d.rooms.map { it.name },
+            kodeTerpakai = d.courses.map { it.code },
             onSimpan = { kode, nama, ruangan ->
-                daftarMatkul.add(
-                    MataKuliah(kode = kode, nama = nama, ruang = ruangan, jumlahPeserta = 0)
-                )
+                val roomId = d.rooms.first { it.name == ruangan }.id
+                ubah {
+                    container.courseRepository.addCourse(
+                        Course(id = "", code = kode, name = nama, lecturerId = user.uid, roomId = roomId, studentIds = emptyList())
+                    )
+                }
                 layar = LayarDosen.BERANDA
-            }
+            },
+            onBack = keBeranda,
+            onProfileClick = keProfil
         )
 
         layar == LayarDosen.DETAIL_MATKUL && matkul != null -> DetailMatkul(
-            username = username,
+            username = user.name,
             matkul = matkul,
-            riwayat = dummyRiwayat,
-            sesiBerlangsung = sesi != null,
+            riwayat = riwayat,
+            sesiBerlangsung = sesiBerjalan != null,
             onBukaSesi = { layar = LayarDosen.BUKA_SESI },
             onKelolaPeserta = { layar = LayarDosen.KELOLA_PESERTA },
             onEditMatkul = { layar = LayarDosen.EDIT_MATKUL },
-            onRekap = { layar = LayarDosen.REKAP_KEHADIRAN }
+            onRekap = { layar = LayarDosen.REKAP_KEHADIRAN },
+            onBack = keBeranda,
+            onProfileClick = keProfil
         )
 
-        layar == LayarDosen.EDIT_MATKUL && matkul != null -> TambahMatkul(
-            username = username,
+        layar == LayarDosen.EDIT_MATKUL && course != null && matkul != null -> TambahMatkul(
+            username = user.name,
             judul = "Edit Mata Kuliah",
-            kodeAwal = matkul.kode,
-            namaAwal = matkul.nama,
+            kodeAwal = course.code,
+            namaAwal = course.name,
             ruanganAwal = matkul.ruang,
-            daftarRuangan = dummyRuanganFingerprint,
-            kodeTerpakai = daftarMatkul.map { it.kode }.filter { it != matkul.kode },
+            daftarRuangan = d.rooms.map { it.name },
+            kodeTerpakai = d.courses.filter { it.id != course.id }.map { it.code },
             onSimpan = { kode, nama, ruangan ->
-                val lama = matkul.kode
-                val idx = daftarMatkul.indexOfFirst { it.kode == lama }
-                if (idx >= 0) {
-                    daftarMatkul[idx] = matkul.copy(kode = kode, nama = nama, ruang = ruangan)
-                }
-                // Kode berubah: pindahkan data peserta & rekap ke kode baru
-                if (kode != lama) {
-                    pesertaMap.remove(lama)?.let { pesertaMap[kode] = it }
-                    rekapMap.keys.filter { it.startsWith("$lama#") }.forEach { k ->
-                        rekapMap.remove(k)?.let { rekapMap["$kode#" + k.substringAfter('#')] = it }
-                    }
-                    kodeTerpilih = kode
-                }
-                // Sesi yang sedang berjalan untuk matkul ini ikut diperbarui
-                sesiBerjalan = sesiBerjalan?.let {
-                    if (it.kodeMatkul == lama) {
-                        it.copy(kodeMatkul = kode, namaMatkul = nama, ruang = ruangan)
-                    } else it
-                }
+                val roomId = d.rooms.first { it.name == ruangan }.id
+                ubah { container.courseRepository.updateCourse(course.copy(code = kode, name = nama, roomId = roomId)) }
                 layar = LayarDosen.DETAIL_MATKUL
-            }
+            },
+            onBack = keDetail,
+            onProfileClick = keProfil
         )
 
         layar == LayarDosen.BUKA_SESI && matkul != null -> BukaSesi(
-            username = username,
+            username = user.name,
             daftarMatkul = daftarMatkul,
             matkulAwal = matkul,
             onBukaAbsensi = { m, jamMulai, jamSelesai ->
-                sesiBerjalan = SesiAktif(
-                    kodeMatkul = m.kode,
-                    namaMatkul = m.nama,
-                    waktu = "$jamMulai - $jamSelesai",
-                    ruang = m.ruang,
-                    hadir = 0,
-                    totalMahasiswa = m.jumlahPeserta
-                )
+                val c = d.courses.first { it.id == m.id }
+                val sekarang = System.currentTimeMillis()
+                ubah {
+                    container.sessionRepository.openSession(
+                        courseId = c.id,
+                        lecturerId = user.uid,
+                        roomId = c.roomId,
+                        startAtMs = jamHariIni(jamMulai, sekarang),
+                        endAtMs = jamHariIni(jamSelesai, sekarang)
+                    )
+                }
                 layar = LayarDosen.BERANDA
-            }
+            },
+            onBack = keDetail,
+            onProfileClick = keProfil
         )
 
-        layar == LayarDosen.KELOLA_PESERTA && matkul != null -> KelolaPeserta(
-            username = username,
+        layar == LayarDosen.KELOLA_PESERTA && course != null && matkul != null -> KelolaPeserta(
+            username = user.name,
             matkul = matkul,
             peserta = pesertaMatkul,
-            daftarMahasiswa = dummyMahasiswa,
-            onTambah = { setPeserta(matkul.kode, pesertaMatkul + it) },
-            onHapus = { m -> setPeserta(matkul.kode, pesertaMatkul.filter { it.nim != m.nim }) }
+            daftarMahasiswa = d.semuaMahasiswa.map { Peserta(it.name, it.nim ?: "-", it.uid) },
+            onTambah = { p -> ubah { container.courseRepository.setStudents(course.id, course.studentIds + p.uid) } },
+            onHapus = { p -> ubah { container.courseRepository.setStudents(course.id, course.studentIds - p.uid) } },
+            onBack = keDetail,
+            onProfileClick = keProfil
         )
 
-        layar == LayarDosen.REKAP_KEHADIRAN && matkul != null -> RekapKehadiran(
-            username = username,
+        layar == LayarDosen.REKAP_KEHADIRAN && course != null && matkul != null -> RekapKehadiran(
+            username = user.name,
             matkul = matkul,
-            riwayat = dummyRiwayat,
+            riwayat = riwayat,
             catatanUntuk = { p ->
-                rekapMap["${matkul.kode}#${p.nomor}"] ?: buatCatatan(pesertaMatkul, p)
-            },
-            onUbahStatus = { p, nim, status ->
-                val kunci = "${matkul.kode}#${p.nomor}"
-                val dasar = rekapMap[kunci] ?: buatCatatan(pesertaMatkul, p)
-                rekapMap[kunci] = dasar.map {
-                    if (it.nim == nim) it.copy(status = status, manual = true) else it
+                val sesi = d.sessions[course.id].orEmpty().firstOrNull { it.id == p.sessionId }
+                val selesai = sesi?.hasEnded(now) ?: true
+                d.pesertaDari(course).map { u ->
+                    val a = d.kehadiran(p.sessionId, u.uid)
+                    CatatanKehadiran(
+                        nama = u.name,
+                        nim = u.nim ?: "-",
+                        status = a?.status?.toUi()
+                            ?: if (selesai) AttendanceStatus.Alpa else AttendanceStatus.BelumAbsen,
+                        manual = a?.method == AttendanceMethod.MANUAL,
+                        uid = u.uid
+                    )
                 }
-            }
+            },
+            onUbahStatus = { p, uid, status ->
+                ubah {
+                    container.attendanceRepository.setManualStatus(p.sessionId, course.id, uid, status.toPresence())
+                }
+            },
+            onBack = keDetail,
+            onProfileClick = keProfil
         )
 
         else -> BerandaDosen(
-            username = username,
-            sesiAktif = sesi?.copy(
-                hadir = kehadiran.count { it.jamAbsen != null },
-                totalMahasiswa = kehadiran.size
-            ),
+            username = user.name,
+            sesiAktif = sesiAktif,
             daftarMatkul = daftarMatkul,
             onPantauSesi = { layar = LayarDosen.PANTAU_SESI },
             onTambahMatkul = { layar = LayarDosen.TAMBAH_MATKUL },
             onMatkulClick = {
-                kodeTerpilih = it.kode
+                courseIdTerpilih = it.id
                 layar = LayarDosen.DETAIL_MATKUL
-            }
+            },
+            onProfileClick = keProfil
         )
     }
-}
-
-/** Dummy: bentuk catatan awal sebuah pertemuan dari jumlah hadir di riwayat. */
-private fun buatCatatan(peserta: List<Peserta>, p: Pertemuan): List<CatatanKehadiran> {
-    val sisa = listOf(StatusHadir.Alpa, StatusHadir.Izin, StatusHadir.Sakit)
-    return peserta.mapIndexed { i, m ->
-        val status = if (i < p.hadir) StatusHadir.Hadir else sisa[(i - p.hadir) % sisa.size]
-        CatatanKehadiran(m.nama, m.nim, status)
-    }
-}
-
-// ---------- Data dummy ----------
-private val dummyMatkul = listOf(
-    MataKuliah("IF301", "Pemrograman Mobile", "Lab 3", 25),
-    MataKuliah("IF302", "Kecerdasan Buatan", "R. 201", 30),
-    MataKuliah("IF303", "Sistem Terdistribusi", "R. 202", 28)
-)
-
-// Ruangan yang sudah punya data fingerprint
-private val dummyRuanganFingerprint = listOf("LAB 2 UPT", "LAB UPT LT 3", "B4.05")
-
-private val dummyRiwayat = listOf(
-    Pertemuan(8, 23, 25, "16 Okt 2026", "13:00 - 15:00"),
-    Pertemuan(7, 22, 25, "9 Okt 2026", "13:00 - 15:00"),
-    Pertemuan(6, 25, 25, "2 Okt 2026", "13:00 - 15:00")
-)
-
-private val dummyKehadiran = List(25) { i ->
-    KehadiranMahasiswa(
-        nama = "Mahasiswa ${i + 1}",
-        nim = "M0723%03d".format(i + 1),
-        jamAbsen = if (i < 18) "08:%02d".format(i + 1) else null
-    )
-}
-
-private val dummyNama = listOf(
-    "Andi Pratama", "Budi Santoso", "Citra Lestari", "Dewi Anggraini", "Eko Prasetyo",
-    "Fitri Handayani", "Gilang Ramadhan", "Hana Safitri", "Irfan Maulana", "Jihan Aulia",
-    "Kevin Wijaya", "Laila Nurhaliza", "Muhammad Rizky", "Nadia Putri", "Oki Setiawan",
-    "Putri Maharani", "Qori Rahman", "Rina Kusuma", "Satria Nugraha", "Tiara Azzahra",
-    "Umar Faruq", "Vina Oktaviani", "Wahyu Hidayat", "Xavier Pranata", "Yusuf Alamsyah",
-    "Zahra Salsabila", "Agus Salim", "Bella Safira", "Candra Dirgantara", "Dimas Anggara",
-    "Elsa Marlina", "Farhan Hakim", "Galih Permana", "Hesti Rahayu", "Ilham Saputra",
-    "Jasmine Putri", "Kurnia Dewi", "Lutfi Ananda", "Mega Wulandari", "Naufal Ghifari"
-)
-
-// Semua mahasiswa yang bisa ditambahkan sebagai peserta
-private val dummyMahasiswa = dummyNama.mapIndexed { i, nama ->
-    Peserta(nama, "L2002200%02d".format(i + 1))
 }

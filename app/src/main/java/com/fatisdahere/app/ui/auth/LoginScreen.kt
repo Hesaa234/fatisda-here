@@ -9,7 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,7 +24,8 @@ fun LoginScreen(
     onLoginClick: () -> Unit,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
-    errorMessage: String? = null
+    errorMessage: String? = null,
+    infoMessage: String? = null
 ) {
     Scaffold(modifier, topBar = { FatisdaTopBar() }, containerColor = PageBackground) { padding ->
         Column(
@@ -34,7 +34,7 @@ fun LoginScreen(
         ) {
             SectionCard("Masuk") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Email", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    FieldLabel("Email")
                     OutlinedTextField(
                         value = email,
                         onValueChange = onEmailChange,
@@ -46,7 +46,7 @@ fun LoginScreen(
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Kata Sandi", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    FieldLabel("Kata Sandi")
                     OutlinedTextField(
                         value = password,
                         onValueChange = onPasswordChange,
@@ -58,16 +58,15 @@ fun LoginScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
                 }
-                if (errorMessage != null) Text(errorMessage, color = StatusDanger, fontSize = 13.sp)
-                Box(contentAlignment = Alignment.Center) {
-                    PrimaryButton("Masuk", onLoginClick, enabled = !isLoading)
-                    if (isLoading) CircularProgressIndicator(Modifier.size(22.dp), color = UnsBlue, strokeWidth = 2.dp)
-                }
+                if (errorMessage != null) ErrorText(errorMessage)
+                // Tanpa animasi berputar: lihat catatan di LoadingContent (Components.kt)
+                PrimaryButton(if (isLoading) "Memproses..." else "Masuk", onLoginClick, enabled = !isLoading)
                 Text(
                     "Akun dibuat oleh admin. Hubungi admin jika belum memiliki akun.",
                     fontSize = 13.sp,
                     color = TextPrimary.copy(alpha = 0.65f)
                 )
+                if (infoMessage != null) HelperText(infoMessage, color = UnsBlue)
             }
         }
     }
@@ -76,5 +75,5 @@ fun LoginScreen(
 @Preview(showBackground = true)
 @Composable
 private fun LoginScreenPreview() {
-    FatisdaTheme { LoginScreen("", "", {}, {}, {}) }
+    FatisdaTheme { LoginScreen("", "", {}, {}, {}, infoMessage = "Mode demo") }
 }

@@ -6,6 +6,7 @@ import com.fatisdahere.app.ui.theme.StatusSuccess
 import com.fatisdahere.app.ui.theme.StatusWarning
 import com.fatisdahere.app.ui.theme.UnsNavy
 
+/** Status kehadiran untuk tampilan. Dipakai halaman mahasiswa DAN dosen. */
 enum class AttendanceStatus(val label: String, val color: Color) {
     Hadir("Hadir", StatusSuccess),
     Izin("Izin", StatusWarning),
@@ -19,7 +20,10 @@ data class SessionUi(
     val name: String,
     val time: String,
     val room: String,
-    val lecturer: String
+    val lecturer: String,
+    // id data asli; kosong untuk data contoh di Preview
+    val courseId: String = "",
+    val sessionId: String? = null
 ) {
     val title get() = "($code) - $name"
 }

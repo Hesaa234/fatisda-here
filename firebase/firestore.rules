@@ -1,0 +1,97 @@
+rules_version = '2';
+
+// Aturan keamanan Firestore untuk Fatisda Here.
+// Cara pasang: Firebase Console > Firestore Database > tab Rules > tempel seluruh isi file ini > Publish.
+// Peran dibaca dari users/{uid}.role: "mahasiswa", "dosen", atau "admin".
+//
+// Catatan: validasi posisi (KNN) tetap dilakukan di aplikasi; rules hanya memastikan
+// setiap orang hanya bisa mengubah data miliknya sendiri.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Fungsi bantu ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+    function hasRole(role) {
+      return signedIn() && exists(userPath()) && get(userPath()).data.role == role;
+    }
+    function isAdmin() { return hasRole('admin'); }
+    function isDosen() { return hasRole('dosen'); }
+    function isMahasiswa() { return hasRole('mahasiswa'); }
+
+    // Dosen pengampu sebuah mata kuliah
+    function isLecturerOf(courseId) {
+      return isDosen()
+        && get(/databases/$(database)/documents/courses/$(courseId)).data.lecturerId == request.auth.uid;
+    }
+
+    // ---------- users ----------
+    // Semua yang login boleh membaca (nama dosen/peserta). Hanya admin yang menulis.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- rooms & config ----------
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /config/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- courses ----------
+    match /courses/{courseId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        || (isDosen() && request.resource.data.lecturerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isDosen()
+            && resource.data.lecturerId == request.auth.uid
+            && request.resource.data.lecturerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- sessions ----------
+    match /sessions/{sessionId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        || (isLecturerOf(request.resource.data.courseId)
+            && request.resource.data.lecturerId == request.auth.uid);
+      allow update, delete: if isAdmin()
+        || (isDosen() && resource.data.lecturerId == request.auth.uid);
+    }
+
+    // ---------- attendances (id = sessionId_uid) ----------
+    match /attendances/{attendanceId} {
+      // Mahasiswa hanya membaca miliknya (termasuk cek "sudah absen" pada dokumen yang belum ada)
+      allow read: if isAdmin() || isDosen()
+        || (isMahasiswa() && (resource == null || resource.data.studentId == request.auth.uid));
+
+      // Mahasiswa absen untuk dirinya sendiri, id dokumen harus sessionId_uid
+      allow create: if (isMahasiswa()
+          && request.resource.data.studentId == request.auth.uid
+          && attendanceId == request.resource.data.sessionId + '_' + request.auth.uid)
+        || isAdmin()
+        || isLecturerOf(request.resource.data.courseId);
+
+      // Perubahan status manual oleh dosen pengampu (Rekap Kehadiran) atau admin
+      allow update: if isAdmin() || isLecturerOf(resource.data.courseId);
+      allow delete: if isAdmin() || isLecturerOf(resource.data.courseId);
+    }
+
+    // ---------- attempts ----------
+    match /attempts/{attemptId} {
+      allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
+      allow read: if isAdmin() || isDosen();
+      allow update, delete: if isAdmin();
+    }
+  }
+}
