@@ -376,6 +376,45 @@ fun LoadingContent(padding: PaddingValues = PaddingValues(0.dp)) {
     }
 }
 
+/** Pengganti isi halaman saat data gagal dimuat. */
+@Composable
+fun ErrorContent(message: String, onRetry: () -> Unit, padding: PaddingValues = PaddingValues(0.dp), onLogout: (() -> Unit)? = null) {
+    Column(
+        Modifier.fillMaxSize().padding(padding).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+    ) {
+        SectionCard("Gagal memuat data") {
+            HelperText(message)
+            PrimaryButton("Coba Lagi", onRetry)
+            if (onLogout != null) SecondaryButton("Log Out", onLogout)
+        }
+    }
+}
+
+/** Dialog pesan kesalahan (misalnya gagal menyimpan). */
+@Composable
+fun ErrorDialog(message: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Terjadi kesalahan") },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = UnsBlue, fontWeight = FontWeight.Bold) } }
+    )
+}
+
+/** Pesan yang ditampilkan ke pengguna dari sebuah exception. */
+fun pesanGalat(e: Throwable): String {
+    val m = e.message.orEmpty()
+    return when {
+        m.contains("PERMISSION_DENIED", ignoreCase = true) ->
+            "Akses ditolak oleh Firebase (cek rules Firestore dan role akun)."
+        m.contains("offline", ignoreCase = true) || m.contains("UNAVAILABLE") ->
+            "Tidak bisa terhubung ke server. Cek koneksi internet."
+        m.isNotBlank() -> m
+        else -> "Terjadi kesalahan."
+    }
+}
+
 /** Isi halaman profil, sama untuk mahasiswa, dosen, dan admin. fields = (label, nilai). */
 @Composable
 fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit, padding: PaddingValues) {

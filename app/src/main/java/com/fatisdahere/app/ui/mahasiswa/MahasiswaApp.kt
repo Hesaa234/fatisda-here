@@ -16,6 +16,7 @@ import com.fatisdahere.app.di.AppContainer
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 private enum class LayarMahasiswa { HOME, COURSE_DETAIL, SCANNING, RESULT, PROFILE }
 
@@ -61,12 +62,23 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var versi by remember { mutableStateOf(0) }
     var data by remember { mutableStateOf<DataMahasiswa?>(null) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
+    var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(user.uid, versi) {
-        now = System.currentTimeMillis()
-        data = muatDataMahasiswa(container, user.uid)
+        try {
+            now = System.currentTimeMillis()
+            data = muatDataMahasiswa(container, user.uid)
+            galatMuat = null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            galatMuat = pesanGalat(e)
+        }
     }
+
+    galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
 
     BackHandler(enabled = layar != LayarMahasiswa.HOME) {
         layar = LayarMahasiswa.HOME
@@ -74,8 +86,13 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     val d = data
     if (d == null) {
+        val pesan = galatMuat
         Scaffold(topBar = { FatisdaTopBar(user.name) }, containerColor = PageBackground) { padding ->
-            LoadingContent(padding)
+            if (pesan != null) {
+                ErrorContent(pesan, onRetry = { galatMuat = null; versi++ }, padding = padding, onLogout = onLogout)
+            } else {
+                LoadingContent(padding)
+            }
         }
         return
     }
@@ -117,6 +134,39 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             layar = LayarMahasiswa.RESULT
         } else {
             layar = LayarMahasiswa.SCANNING
+        }
+    }
+
+    /** Simpan absen ke repository, lalu tampilkan halaman hasil. */
+    fun kirimAbsen(sesi: SessionUi, status: AttendanceStatus) {
+        scope.launch {
+            try {
+                val presence = status.toPresence() ?: PresenceStatus.HADIR
+                // SIMULASI: belum memakai hasil engine KNN. Nanti field knn* diisi dari PositioningDecision.
+                val result = container.attendanceRepository.save(
+                    Attendance(
+                        sessionId = sesi.sessionId ?: "",
+                        courseId = sesi.courseId,
+                        studentId = user.uid,
+                        status = presence,
+                        method = if (presence == PresenceStatus.HADIR) AttendanceMethod.AUTO else AttendanceMethod.MANUAL,
+                        detectedRoomId = null,
+                        fingerprintVersion = container.fingerprint.version,
+                        deviceModel = Build.MODEL
+                    )
+                )
+                hasil = HasilAbsen(
+                    status = status,
+                    state = if (result.isSuccess) ResultState.Verified else ResultState.Rejected,
+                    message = result.exceptionOrNull()?.message
+                )
+                layar = LayarMahasiswa.RESULT
+                versi++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                galatAksi = pesanGalat(e)
+            }
         }
     }
 
@@ -169,31 +219,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             userName = user.name,
             session = sesi,
             wifiName = container.fingerprint.ssid,
-            onSelesai = { status ->
-                scope.launch {
-                    val presence = status.toPresence() ?: PresenceStatus.HADIR
-                    // SIMULASI: belum memakai hasil engine KNN. Nanti field knn* diisi dari PositioningDecision.
-                    val result = container.attendanceRepository.save(
-                        Attendance(
-                            sessionId = sesi.sessionId ?: "",
-                            courseId = sesi.courseId,
-                            studentId = user.uid,
-                            status = presence,
-                            method = if (presence == PresenceStatus.HADIR) AttendanceMethod.AUTO else AttendanceMethod.MANUAL,
-                            detectedRoomId = null,
-                            fingerprintVersion = container.fingerprint.version,
-                            deviceModel = Build.MODEL
-                        )
-                    )
-                    hasil = HasilAbsen(
-                        status = status,
-                        state = if (result.isSuccess) ResultState.Verified else ResultState.Rejected,
-                        message = result.exceptionOrNull()?.message
-                    )
-                    layar = LayarMahasiswa.RESULT
-                    versi++
-                }
-            },
+            onSelesai = { status -> kirimAbsen(sesi, status) },
             onProfileClick = keProfil,
             onBack = keHome
         )

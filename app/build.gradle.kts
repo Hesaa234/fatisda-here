@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application") version "8.5.0"
     id("org.jetbrains.kotlin.android") version "1.9.0"
+    // Membaca app/google-services.json (file ini TIDAK di-commit, dibagikan lewat grup)
+    id("com.google.gms.google-services") version "4.4.1"
 }
 
 android {
@@ -68,6 +70,13 @@ dependencies {
 
     // Material Icons Extended (Penting untuk AccountCircle profile)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
+
+    // Firebase (versi diatur oleh firebase-bom)
+    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    // Supaya Task Firebase bisa ditunggu dengan .await() di coroutine
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

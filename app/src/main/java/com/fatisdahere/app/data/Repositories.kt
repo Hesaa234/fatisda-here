@@ -14,11 +14,27 @@ interface AuthRepository {
     suspend fun signOut()
 }
 
+/** Data untuk membuat akun baru dari halaman admin. */
+data class NewAccount(
+    val name: String,
+    val email: String,
+    val password: String,
+    val role: Role,
+    val nim: String? = null,
+    val nip: String? = null,
+)
+
 interface UserRepository {
     suspend fun usersByIds(uids: Collection<String>): List<AppUser>
 
     /** Semua user dengan role mahasiswa (untuk Kelola Peserta). */
     suspend fun students(): List<AppUser>
+
+    /** Semua user (untuk admin). */
+    suspend fun allUsers(): List<AppUser>
+
+    /** Admin: buat akun login + dokumen users/{uid}. Admin tetap login. */
+    suspend fun createAccount(account: NewAccount): Result<AppUser>
 }
 
 interface RoomRepository {
@@ -28,6 +44,9 @@ interface RoomRepository {
 interface CourseRepository {
     suspend fun coursesForStudent(uid: String): List<Course>
     suspend fun coursesForLecturer(uid: String): List<Course>
+
+    /** Semua mata kuliah (untuk admin). */
+    suspend fun allCourses(): List<Course>
 
     /** id kosong akan dibuatkan. Mengembalikan course yang tersimpan (dengan id). */
     suspend fun addCourse(course: Course): Course
