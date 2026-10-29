@@ -85,4 +85,19 @@ class KnnPositioningEngineTest {
         assertFalse(decision.accepted)
         assertEquals(RejectReason.MOVING, decision.reason)
     }
+
+    @Test
+    fun avgKnnDistanceUsesOnlyPassedScans() {
+        val good = scan(apA to -51, apB to -89)
+        val bad = scan(apA to -90, apB to -50)
+        val decision = engine.decide(listOf(good, bad, good), still, "A")
+        val expected = engine.evaluateScan(good, "A").verdict.knnDistance
+        assertEquals(expected, decision.avgKnnDistance!!, 1e-9)
+    }
+
+    @Test
+    fun avgKnnDistanceIsNullWithoutSignal() {
+        val decision = engine.decide(List(3) { scan() }, still, "A")
+        assertEquals(null, decision.avgKnnDistance)
+    }
 }

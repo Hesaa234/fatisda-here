@@ -19,7 +19,14 @@ data class PositioningDecision(
     val displacementM: Double,
     val verdicts: List<ScanVerdict>,
     val reason: RejectReason?,
-)
+) {
+    /** Rata-rata jarak KNN dari scan yang lolos (atau semua scan bila tidak ada yang lolos); null kalau tidak ada sinyal. */
+    val avgKnnDistance: Double?
+        get() {
+            val sumber = verdicts.filter { it.passed }.ifEmpty { verdicts }
+            return sumber.map { it.knnDistance }.filter { !it.isNaN() }.takeIf { it.isNotEmpty() }?.average()
+        }
+}
 
 interface PositioningEngine {
     fun decide(scans: List<WifiScan>, motion: MotionSummary, targetRoomId: String): PositioningDecision
