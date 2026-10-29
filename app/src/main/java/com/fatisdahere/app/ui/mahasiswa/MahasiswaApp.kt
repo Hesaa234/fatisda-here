@@ -141,6 +141,15 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     fun kirimAbsen(sesi: SessionUi, status: AttendanceStatus) {
         scope.launch {
             try {
+                // Cek ulang: sesi bisa saja sudah lewat atau ditutup dosen sejak halaman dibuka
+                val sesiTerkini = container.sessionRepository.sessionsOfCourse(sesi.courseId)
+                    .firstOrNull { it.id == sesi.sessionId }
+                if (sesiTerkini == null || !sesiTerkini.isOpen(System.currentTimeMillis())) {
+                    hasil = HasilAbsen(status, ResultState.Rejected, "Sesi absen sudah berakhir atau ditutup dosen.")
+                    layar = LayarMahasiswa.RESULT
+                    versi++
+                    return@launch
+                }
                 val presence = status.toPresence() ?: PresenceStatus.HADIR
                 // SIMULASI: belum memakai hasil engine KNN. Nanti field knn* diisi dari PositioningDecision.
                 val result = container.attendanceRepository.save(
