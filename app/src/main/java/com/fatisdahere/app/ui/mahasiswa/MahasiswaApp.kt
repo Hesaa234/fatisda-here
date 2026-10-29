@@ -6,6 +6,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.fatisdahere.app.data.AppUser
+import com.fatisdahere.app.data.Attempt
 import com.fatisdahere.app.data.Attendance
 import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
@@ -13,12 +14,17 @@ import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.PresenceStatus
 import com.fatisdahere.app.data.Room
 import com.fatisdahere.app.di.AppContainer
+import com.fatisdahere.app.positioning.MotionSummary
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.PageBackground
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
 private enum class LayarMahasiswa { HOME, COURSE_DETAIL, SCANNING, RESULT, PROFILE }
+
+/** Jumlah scan Wi-Fi per percobaan absen. Android membatasi 4 scan per 2 menit, jadi jangan lebih dari 4. */
+private const val SCAN_PER_ABSEN = 3
 
 /** Semua data yang dibutuhkan halaman mahasiswa, dimuat sekaligus dari repository. */
 private class DataMahasiswa(
@@ -64,6 +70,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
     var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
+    var proses by remember { mutableStateOf<ProsesAbsen>(ProsesAbsen.Siap) }
+    var jobAbsen by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(user.uid, versi) {
@@ -80,9 +88,13 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
 
-    BackHandler(enabled = layar != LayarMahasiswa.HOME) {
+    // Keluar dari halaman absen membatalkan scan yang sedang berjalan
+    val keHome = {
+        jobAbsen?.cancel()
         layar = LayarMahasiswa.HOME
     }
+
+    BackHandler(enabled = layar != LayarMahasiswa.HOME, onBack = keHome)
 
     val d = data
     if (d == null) {
@@ -97,8 +109,10 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         return
     }
 
-    val keHome = { layar = LayarMahasiswa.HOME }
-    val keProfil = { layar = LayarMahasiswa.PROFILE }
+    val keProfil = {
+        jobAbsen?.cancel()
+        layar = LayarMahasiswa.PROFILE
+    }
 
     fun uiCourse(c: Course): SessionUi {
         val terakhir = d.sessions[c.id].orEmpty().lastOrNull()
@@ -108,7 +122,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             time = terakhir?.let { formatHariJam(it.startAtMs) } ?: "-",
             room = d.namaRuang(c.roomId),
             lecturer = d.namaDosen(c.lecturerId),
-            courseId = c.id
+            courseId = c.id,
+            roomId = c.roomId
         )
     }
 
@@ -119,7 +134,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         room = d.namaRuang(s.roomId),
         lecturer = d.namaDosen(c.lecturerId),
         courseId = c.id,
-        sessionId = s.id
+        sessionId = s.id,
+        roomId = s.roomId
     )
 
     fun mulaiAbsen(sesi: SessionUi) {
@@ -137,44 +153,108 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         }
     }
 
-    /** Simpan absen ke repository, lalu tampilkan halaman hasil. */
+    fun tampilkanHasil(h: HasilAbsen) {
+        hasil = h
+        layar = LayarMahasiswa.RESULT
+        versi++
+    }
+
+    /**
+     * Hadir: scan Wi-Fi, putuskan dengan engine KNN, catat percobaannya, lalu simpan kalau diterima.
+     * Sakit/Izin: langsung disimpan sebagai keterangan manual.
+     */
     fun kirimAbsen(sesi: SessionUi, status: AttendanceStatus) {
-        scope.launch {
+        if (jobAbsen?.isActive == true) return
+        val sessionId = sesi.sessionId ?: return
+        jobAbsen = scope.launch {
             try {
                 // Cek ulang: sesi bisa saja sudah lewat atau ditutup dosen sejak halaman dibuka
-                val sesiTerkini = container.sessionRepository.sessionsOfCourse(sesi.courseId)
-                    .firstOrNull { it.id == sesi.sessionId }
-                if (sesiTerkini == null || !sesiTerkini.isOpen(System.currentTimeMillis())) {
-                    hasil = HasilAbsen(status, ResultState.Rejected, "Sesi absen sudah berakhir atau ditutup dosen.")
-                    layar = LayarMahasiswa.RESULT
-                    versi++
-                    return@launch
+                suspend fun sesiMasihBuka() = container.sessionRepository.sessionsOfCourse(sesi.courseId)
+                    .firstOrNull { it.id == sessionId }?.isOpen(System.currentTimeMillis()) == true
+                val sesiBerakhir = HasilAbsen(status, ResultState.Rejected, "Sesi absen sudah berakhir atau ditutup dosen.")
+
+                proses = ProsesAbsen.Memproses
+                if (!sesiMasihBuka()) return@launch tampilkanHasil(sesiBerakhir)
+
+                var attendance = Attendance(
+                    sessionId = sessionId,
+                    courseId = sesi.courseId,
+                    studentId = user.uid,
+                    status = status.toPresence() ?: PresenceStatus.HADIR,
+                    method = AttendanceMethod.MANUAL,
+                    fingerprintVersion = container.fingerprint.version,
+                    deviceModel = Build.MODEL
+                )
+
+                if (status == AttendanceStatus.Hadir) {
+                    if (sesi.roomId !in container.positioningParams.rooms) {
+                        return@launch tampilkanHasil(
+                            HasilAbsen(status, ResultState.Rejected, "Ruangan ${sesi.room} belum punya data fingerprint Wi-Fi. Hubungi dosen.")
+                        )
+                    }
+
+                    val scanner = container.wifiScanner
+                    proses = ProsesAbsen.Memindai(0, SCAN_PER_ABSEN)
+                    val scans = scanner.scan(SCAN_PER_ABSEN) { proses = ProsesAbsen.Memindai(it, SCAN_PER_ABSEN) }
+                    // PDR belum dipasang: perpindahan dianggap 0 m.
+                    val decision = container.positioningEngine.decide(scans, MotionSummary(0, 0.0), sesi.roomId)
+
+                    proses = ProsesAbsen.Memproses
+                    // Log percobaan tidak boleh menggagalkan absen
+                    try {
+                        container.attendanceRepository.saveAttempt(
+                            Attempt(
+                                sessionId = sessionId,
+                                studentId = user.uid,
+                                accepted = decision.accepted,
+                                reason = decision.reason?.name,
+                                knnDistance = decision.avgKnnDistance,
+                                validScans = decision.validScans,
+                                displacementM = decision.displacementM
+                            )
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // abaikan
+                    }
+
+                    if (!decision.accepted) {
+                        val alasan = decision.reason?.pesan(sesi.room, container.fingerprint.ssid)
+                            ?: "Posisimu belum terkonfirmasi di dalam ruangan. Coba lagi."
+                        val catatanThrottle = if (scanner.staleScanCount > 0) {
+                            "\n\nAndroid membatasi scan Wi-Fi (maks 4 kali per 2 menit). Tunggu sebentar sebelum mencoba lagi."
+                        } else ""
+                        return@launch tampilkanHasil(HasilAbsen(status, ResultState.Rejected, alasan + catatanThrottle))
+                    }
+
+                    attendance = attendance.copy(
+                        method = AttendanceMethod.AUTO,
+                        detectedRoomId = sesi.roomId,
+                        knnDistance = decision.avgKnnDistance,
+                        validScans = decision.validScans,
+                        displacementM = decision.displacementM
+                    )
+                    // Scan bisa sampai 30 detik; sesi mungkin berakhir di tengahnya
+                    if (!sesiMasihBuka()) return@launch tampilkanHasil(sesiBerakhir)
                 }
-                val presence = status.toPresence() ?: PresenceStatus.HADIR
-                // SIMULASI: belum memakai hasil engine KNN. Nanti field knn* diisi dari PositioningDecision.
-                val result = container.attendanceRepository.save(
-                    Attendance(
-                        sessionId = sesi.sessionId ?: "",
-                        courseId = sesi.courseId,
-                        studentId = user.uid,
-                        status = presence,
-                        method = if (presence == PresenceStatus.HADIR) AttendanceMethod.AUTO else AttendanceMethod.MANUAL,
-                        detectedRoomId = null,
-                        fingerprintVersion = container.fingerprint.version,
-                        deviceModel = Build.MODEL
+
+                val result = container.attendanceRepository.save(attendance)
+                tampilkanHasil(
+                    HasilAbsen(
+                        status = status,
+                        state = if (result.isSuccess) ResultState.Verified else ResultState.Rejected,
+                        message = result.exceptionOrNull()?.message
                     )
                 )
-                hasil = HasilAbsen(
-                    status = status,
-                    state = if (result.isSuccess) ResultState.Verified else ResultState.Rejected,
-                    message = result.exceptionOrNull()?.message
-                )
-                layar = LayarMahasiswa.RESULT
-                versi++
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: SecurityException) {
+                galatAksi = "Izin lokasi ditolak sistem. Berikan izin lokasi lalu coba lagi."
             } catch (e: Exception) {
                 galatAksi = pesanGalat(e)
+            } finally {
+                proses = ProsesAbsen.Siap
             }
         }
     }
@@ -228,7 +308,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             userName = user.name,
             session = sesi,
             wifiName = container.fingerprint.ssid,
-            onSelesai = { status -> kirimAbsen(sesi, status) },
+            proses = proses,
+            onKirim = { status -> kirimAbsen(sesi, status) },
             onProfileClick = keProfil,
             onBack = keHome
         )
