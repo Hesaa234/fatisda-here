@@ -9,6 +9,8 @@ import com.fatisdahere.app.data.AttendanceRepository
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.CourseRepository
+import com.fatisdahere.app.data.KalibrasiRepository
+import com.fatisdahere.app.data.KnnTest
 import com.fatisdahere.app.data.NewAccount
 import com.fatisdahere.app.data.PresenceStatus
 import com.fatisdahere.app.data.Proof
@@ -43,6 +45,7 @@ private const val SESSIONS = "sessions"
 private const val ATTENDANCES = "attendances"
 private const val ATTEMPTS = "attempts"
 private const val PROOFS = "proofs"
+private const val KNN_TESTS = "knnTests"
 
 /** Batas aman jumlah nilai untuk whereIn (SDK lama membatasi 10). */
 private const val IN_LIMIT = 10
@@ -270,5 +273,22 @@ class FirestoreAttendanceRepository(
         } else {
             ref.set(Attendance(sessionId, courseId, studentId, status, AttendanceMethod.MANUAL).toMap()).await()
         }
+    }
+}
+
+class FirestoreKalibrasiRepository(
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
+) : KalibrasiRepository {
+
+    override suspend fun saveTest(test: KnnTest): String =
+        db.collection(KNN_TESTS).add(test.toMap()).await().id
+
+    override suspend fun testsForRoom(roomId: String): List<KnnTest> =
+        db.collection(KNN_TESTS).whereEqualTo("roomId", roomId)
+            .get().await().documents.mapNotNull { it.toKnnTest() }
+            .sortedByDescending { it.createdAtMs }
+
+    override suspend fun deleteTest(id: String) {
+        db.collection(KNN_TESTS).document(id).delete().await()
     }
 }

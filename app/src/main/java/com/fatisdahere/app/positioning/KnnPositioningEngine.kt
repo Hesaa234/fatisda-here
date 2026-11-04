@@ -17,7 +17,8 @@ data class PositioningParams(
             maxDisplacementM = 1.5,
             rooms = mapOf(
                 "lab2-upt" to RoomParams("d0:15:a6:d6:7b", -75, 33.0),
-                "lab-upt-lt3" to RoomParams("d0:15:a6:d6:67", -75, 18.0),
+                // 18 -> 30: dengan 18 hampir semua absen di dalam LT 3 gagal di lapis 2 (jarak), lihat uji 31 Okt
+                "lab-upt-lt3" to RoomParams("d0:15:a6:d6:67", -75, 30.0),
                 "b4-05" to RoomParams("d0:15:a6:d6:ba", -75, 33.0),
             ),
         )

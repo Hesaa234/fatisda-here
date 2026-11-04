@@ -6,6 +6,9 @@ import com.fatisdahere.app.data.Attendance
 import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
+import com.fatisdahere.app.data.KnnTest
+import com.fatisdahere.app.data.RawScan
+import com.fatisdahere.app.data.TestPosition
 import com.fatisdahere.app.data.PresenceStatus
 import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
@@ -159,4 +162,56 @@ internal fun Attempt.toMap(): Map<String, Any> = buildMap {
     validScans?.let { put("validScans", it) }
     displacementM?.let { put("displacementM", it) }
     put("createdAt", ts(createdAtMs))
+}
+
+internal fun KnnTest.toMap(): Map<String, Any> = buildMap {
+    put("roomId", roomId)
+    put("position", position.value)
+    put("note", note)
+    put("scans", scans.map { mapOf("time" to ts(it.timeMs), "readings" to it.readings) })
+    put("accepted", accepted)
+    reason?.let { put("reason", it) }
+    put("validScans", validScans)
+    avgDistance?.takeIf { !it.isNaN() }?.let { put("avgDistance", it) }
+    put("rssiMin", rssiMin)
+    put("distanceMax", distanceMax)
+    put("staleScans", staleScans)
+    put("summaries", summaries)
+    put("fingerprintVersion", fingerprintVersion)
+    put("deviceModel", deviceModel)
+    put("testerId", testerId)
+    put("createdAt", ts(createdAtMs))
+}
+
+internal fun DocumentSnapshot.toKnnTest(): KnnTest? {
+    if (!exists()) return null
+    val scans = (get("scans") as? List<*>).orEmpty().mapNotNull { item ->
+        val m = item as? Map<*, *> ?: return@mapNotNull null
+        val time = (m["time"] as? Timestamp)?.toDate()?.time ?: 0L
+        val readings = (m["readings"] as? Map<*, *>).orEmpty().mapNotNull { (k, v) ->
+            val bssid = k as? String ?: return@mapNotNull null
+            val rssi = (v as? Number)?.toInt() ?: return@mapNotNull null
+            bssid to rssi
+        }.toMap()
+        RawScan(time, readings)
+    }
+    return KnnTest(
+        id = id,
+        roomId = getString("roomId") ?: return null,
+        position = TestPosition.from(getString("position")) ?: return null,
+        note = getString("note") ?: "",
+        scans = scans,
+        accepted = getBoolean("accepted") ?: false,
+        reason = getString("reason"),
+        validScans = getLong("validScans")?.toInt() ?: 0,
+        avgDistance = getDouble("avgDistance"),
+        rssiMin = getLong("rssiMin")?.toInt() ?: 0,
+        distanceMax = getDouble("distanceMax") ?: 0.0,
+        staleScans = getLong("staleScans")?.toInt() ?: 0,
+        summaries = (get("summaries") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        fingerprintVersion = getString("fingerprintVersion") ?: "",
+        deviceModel = getString("deviceModel") ?: "",
+        testerId = getString("testerId") ?: "",
+        createdAtMs = ms("createdAt") ?: 0L,
+    )
 }

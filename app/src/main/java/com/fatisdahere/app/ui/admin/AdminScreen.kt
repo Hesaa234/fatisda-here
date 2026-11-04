@@ -73,7 +73,8 @@ fun BerandaAdmin(
     onAkun: () -> Unit,
     onMatkul: () -> Unit,
     onRuangan: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onTesKnn: () -> Unit = {}
 ) {
     Scaffold(
         topBar = { FatisdaTopBar(username, onProfileClick) },
@@ -88,6 +89,7 @@ fun BerandaAdmin(
             item { MenuCard("Akun", "$jumlahAkun akun mahasiswa, dosen, dan admin", onAkun) }
             item { MenuCard("Mata Kuliah", "$jumlahMatkul mata kuliah · atur dosen dan peserta", onMatkul) }
             item { MenuCard("Ruangan", "$jumlahRuangan ruangan dengan data fingerprint", onRuangan) }
+            item { MenuCard("Tes KNN & Kalibrasi", "Uji posisi di tiap ruangan, setel batas, rekap akurasi", onTesKnn) }
         }
     }
 }

@@ -107,6 +107,12 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ---------- knnTests (uji KNN di lapangan dari menu admin) ----------
+    match /knnTests/{testId} {
+      allow read, create, delete: if isAdmin();
+      allow update: if false;
+    }
+
     // ---------- attempts ----------
     match /attempts/{attemptId} {
       allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
