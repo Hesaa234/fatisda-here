@@ -12,6 +12,7 @@ import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Room
 import com.fatisdahere.app.di.AppContainer
 import com.fatisdahere.app.positioning.MotionSummary
@@ -161,9 +162,9 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     /**
      * Hadir: scan Wi-Fi, putuskan dengan engine KNN, catat percobaannya, lalu simpan kalau diterima.
-     * Sakit/Izin: langsung disimpan sebagai keterangan manual.
+     * Sakit/Izin: disimpan sebagai keterangan manual beserta catatan dan foto bukti.
      */
-    fun kirimAbsen(sesi: SessionUi, status: AttendanceStatus) {
+    fun kirimAbsen(sesi: SessionUi, status: AttendanceStatus, izin: KeteranganIzin?) {
         if (jobAbsen?.isActive == true) return
         val sessionId = sesi.sessionId ?: return
         jobAbsen = scope.launch {
@@ -183,8 +184,13 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                     status = status.toPresence() ?: PresenceStatus.HADIR,
                     method = AttendanceMethod.MANUAL,
                     fingerprintVersion = container.fingerprint.version,
-                    deviceModel = Build.MODEL
+                    deviceModel = Build.MODEL,
+                    note = izin?.catatan,
+                    hasProof = izin != null
                 )
+                val bukti = izin?.let {
+                    Proof(sessionId = sessionId, courseId = sesi.courseId, studentId = user.uid, imageBase64 = it.fotoBase64)
+                }
 
                 if (status == AttendanceStatus.Hadir) {
                     if (sesi.roomId !in container.positioningParams.rooms) {
@@ -239,7 +245,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                     if (!sesiMasihBuka()) return@launch tampilkanHasil(sesiBerakhir)
                 }
 
-                val result = container.attendanceRepository.save(attendance)
+                val result = container.attendanceRepository.save(attendance, bukti)
                 tampilkanHasil(
                     HasilAbsen(
                         status = status,
@@ -309,7 +315,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             session = sesi,
             wifiName = container.fingerprint.ssid,
             proses = proses,
-            onKirim = { status -> kirimAbsen(sesi, status) },
+            onKirim = { status, izin -> kirimAbsen(sesi, status, izin) },
             onProfileClick = keProfil,
             onBack = keHome
         )
