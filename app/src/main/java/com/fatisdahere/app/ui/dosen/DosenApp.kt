@@ -52,6 +52,15 @@ private suspend fun muatDataDosen(c: AppContainer, uid: String): DataDosen {
     return DataDosen(courses, rooms, users, semuaMahasiswa, sessions, attendances)
 }
 
+/** Keterangan Sakit/Izin yang sedang dibuka dosen di dialog. */
+private data class BuktiTerbuka(
+    val sessionId: String,
+    val uid: String,
+    val judul: String,
+    val keterangan: String?,
+    val adaBukti: Boolean
+)
+
 /**
  * Alur dosen:
  * Beranda -> Tambah Mata Kuliah
@@ -73,6 +82,7 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
     var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
+    var buktiTerbuka by remember { mutableStateOf<BuktiTerbuka?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(user.uid, versi) {
@@ -88,6 +98,17 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     }
 
     galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
+
+    buktiTerbuka?.let { b ->
+        BuktiDialog(
+            judul = b.judul,
+            keterangan = b.keterangan,
+            muatFoto = {
+                if (b.adaBukti) container.attendanceRepository.proofOf(b.sessionId, b.uid)?.imageBase64 else null
+            },
+            onDismiss = { buktiTerbuka = null }
+        )
+    }
 
     // Di Pantau Sesi, daftar kehadiran diperbarui tiap 10 detik
     if (layar == LayarDosen.PANTAU_SESI) {
@@ -194,8 +215,14 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                     nama = u.name,
                     nim = u.nim ?: "-",
                     status = a?.status?.toUi() ?: AttendanceStatus.BelumAbsen,
-                    jam = a?.let { formatJam(it.createdAtMs) }
+                    jam = a?.let { formatJam(it.createdAtMs) },
+                    uid = u.uid,
+                    keterangan = a?.note,
+                    adaBukti = a?.hasProof == true
                 )
+            },
+            onLihatKeterangan = { m ->
+                buktiTerbuka = BuktiTerbuka(sesiBerjalan.id, m.uid, "${m.status.label} · ${m.nama}", m.keterangan, m.adaBukti)
             },
             onTutupSesi = {
                 ubah { container.sessionRepository.closeSession(sesiBerjalan.id, System.currentTimeMillis()) }
@@ -300,9 +327,14 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                         status = a?.status?.toUi()
                             ?: if (selesai) AttendanceStatus.Alpa else AttendanceStatus.BelumAbsen,
                         manual = a?.method == AttendanceMethod.MANUAL,
-                        uid = u.uid
+                        uid = u.uid,
+                        keterangan = a?.note,
+                        adaBukti = a?.hasProof == true
                     )
                 }
+            },
+            onLihatKeterangan = { p, c ->
+                buktiTerbuka = BuktiTerbuka(p.sessionId, c.uid, "${c.status.label} · ${c.nama}", c.keterangan, c.adaBukti)
             },
             onUbahStatus = { p, uid, status ->
                 ubah {

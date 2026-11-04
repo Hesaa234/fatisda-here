@@ -44,19 +44,30 @@ data class Peserta(
     val uid: String = ""
 )
 
-/** Untuk Pantau Sesi. jam = jam absen (null kalau belum absen). */
+/**
+ * Untuk Pantau Sesi. jam = jam absen (null kalau belum absen).
+ * keterangan/adaBukti = isian mahasiswa saat memilih Sakit/Izin.
+ */
 data class KehadiranMahasiswa(
     val nama: String,
     val nim: String,
     val status: AttendanceStatus = AttendanceStatus.BelumAbsen,
-    val jam: String? = null
+    val jam: String? = null,
+    val uid: String = "",
+    val keterangan: String? = null,
+    val adaBukti: Boolean = false
 )
 
-/** Untuk Rekap Kehadiran. manual = true kalau status diubah dosen; false = hasil verifikasi otomatis. */
+/**
+ * Untuk Rekap Kehadiran. manual = true kalau status diubah dosen atau Sakit/Izin dari mahasiswa;
+ * false = hasil verifikasi otomatis. keterangan/adaBukti = isian mahasiswa saat Sakit/Izin.
+ */
 data class CatatanKehadiran(
     val nama: String,
     val nim: String,
     val status: AttendanceStatus,
     val manual: Boolean = false,
-    val uid: String = ""
+    val uid: String = "",
+    val keterangan: String? = null,
+    val adaBukti: Boolean = false
 )

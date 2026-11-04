@@ -37,7 +37,8 @@ fun RekapKehadiran(
     onUbahStatus: (pertemuan: Pertemuan, uid: String, status: AttendanceStatus) -> Unit,
     onBack: () -> Unit,
     onProfileClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLihatKeterangan: (pertemuan: Pertemuan, catatan: CatatanKehadiran) -> Unit = { _, _ -> }
 ) {
     // Disimpan sebagai sessionId supaya pilihan tetap sama setelah data dimuat ulang
     var dipilihId by remember { mutableStateOf(riwayat.firstOrNull()?.sessionId) }
@@ -90,7 +91,11 @@ fun RekapKehadiran(
                 item { SectionTitle("Daftar Mahasiswa") }
                 if (catatan.isEmpty()) item { HelperText("Belum ada peserta.") }
                 items(catatan) { c ->
-                    KartuCatatan(c) { statusBaru -> onUbahStatus(pertemuan, c.uid, statusBaru) }
+                    KartuCatatan(
+                        c,
+                        onUbah = { statusBaru -> onUbahStatus(pertemuan, c.uid, statusBaru) },
+                        onLihat = { onLihatKeterangan(pertemuan, c) }
+                    )
                 }
                 item {
                     HelperText(
@@ -104,11 +109,12 @@ fun RekapKehadiran(
 }
 
 @Composable
-private fun KartuCatatan(c: CatatanKehadiran, onUbah: (AttendanceStatus) -> Unit) {
+private fun KartuCatatan(c: CatatanKehadiran, onUbah: (AttendanceStatus) -> Unit, onLihat: () -> Unit) {
     ItemCard {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(c.nama)
             ItemSubtitle("${c.nim} · ${if (c.manual) "manual" else "auto"}")
+            KeteranganRingkas(c.keterangan, c.adaBukti, onLihat)
         }
         Spacer(Modifier.width(12.dp))
         PilihStatus(c.status, onUbah)
@@ -161,7 +167,7 @@ private fun RekapKehadiranPreview() {
                 listOf(
                     CatatanKehadiran("Andi Pratama", "M0523001", AttendanceStatus.Hadir),
                     CatatanKehadiran("Budi Santoso", "M0523002", AttendanceStatus.Hadir),
-                    CatatanKehadiran("Citra Lestari", "M0523003", AttendanceStatus.Izin, manual = true),
+                    CatatanKehadiran("Citra Lestari", "M0523003", AttendanceStatus.Izin, manual = true, keterangan = "Lomba tingkat nasional", adaBukti = true),
                     CatatanKehadiran("Dewi Anggraini", "M0523004", AttendanceStatus.Alpa)
                 )
             },

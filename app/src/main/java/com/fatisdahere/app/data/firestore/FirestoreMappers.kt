@@ -7,6 +7,7 @@ import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
 import com.google.firebase.Timestamp
@@ -106,6 +107,8 @@ internal fun DocumentSnapshot.toAttendance(): Attendance? {
         displacementM = getDouble("displacementM"),
         fingerprintVersion = getString("fingerprintVersion"),
         deviceModel = getString("deviceModel"),
+        note = getString("note"),
+        hasProof = getBoolean("hasProof") ?: false,
         createdAtMs = ms("createdAt") ?: 0L,
     )
 }
@@ -123,8 +126,29 @@ internal fun Attendance.toMap(): Map<String, Any> = buildMap {
     displacementM?.let { put("displacementM", it) }
     fingerprintVersion?.let { put("fingerprintVersion", it) }
     deviceModel?.let { put("deviceModel", it) }
+    note?.let { put("note", it) }
+    if (hasProof) put("hasProof", true)
     put("createdAt", ts(createdAtMs))
 }
+
+internal fun DocumentSnapshot.toProof(): Proof? {
+    if (!exists()) return null
+    return Proof(
+        sessionId = getString("sessionId") ?: return null,
+        courseId = getString("courseId") ?: return null,
+        studentId = getString("studentId") ?: return null,
+        imageBase64 = getString("imageBase64") ?: return null,
+        createdAtMs = ms("createdAt") ?: 0L,
+    )
+}
+
+internal fun Proof.toMap(): Map<String, Any> = mapOf(
+    "sessionId" to sessionId,
+    "courseId" to courseId,
+    "studentId" to studentId,
+    "imageBase64" to imageBase64,
+    "createdAt" to ts(createdAtMs),
+)
 
 internal fun Attempt.toMap(): Map<String, Any> = buildMap {
     put("sessionId", sessionId)

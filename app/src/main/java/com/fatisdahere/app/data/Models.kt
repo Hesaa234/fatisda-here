@@ -101,6 +101,25 @@ data class Attendance(
     val displacementM: Double? = null,
     val fingerprintVersion: String? = null,
     val deviceModel: String? = null,
+    /** Keterangan dari mahasiswa untuk Izin/Sakit, misalnya "Demam, ada surat dokter". */
+    val note: String? = null,
+    /** true kalau ada foto bukti di proofs/{id}. */
+    val hasProof: Boolean = false,
+    val createdAtMs: Long = System.currentTimeMillis(),
+) {
+    val id: String get() = attendanceId(sessionId, studentId)
+}
+
+/**
+ * Dokumen proofs/{sessionId}_{uid}: foto bukti Izin/Sakit.
+ * Foto disimpan sebagai teks Base64 (JPEG yang sudah dikompres) karena Firebase Storage berbayar.
+ * Dipisah dari attendances supaya daftar kehadiran tidak ikut mengunduh foto.
+ */
+data class Proof(
+    val sessionId: String,
+    val courseId: String,
+    val studentId: String,
+    val imageBase64: String,
     val createdAtMs: Long = System.currentTimeMillis(),
 ) {
     val id: String get() = attendanceId(sessionId, studentId)

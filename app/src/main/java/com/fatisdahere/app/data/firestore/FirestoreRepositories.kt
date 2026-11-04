@@ -11,6 +11,7 @@ import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.CourseRepository
 import com.fatisdahere.app.data.NewAccount
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
 import com.fatisdahere.app.data.RoomRepository
@@ -41,6 +42,7 @@ private const val COURSES = "courses"
 private const val SESSIONS = "sessions"
 private const val ATTENDANCES = "attendances"
 private const val ATTEMPTS = "attempts"
+private const val PROOFS = "proofs"
 
 /** Batas aman jumlah nilai untuk whereIn (SDK lama membatasi 10). */
 private const val IN_LIMIT = 10
@@ -207,12 +209,16 @@ class FirestoreAttendanceRepository(
     override suspend fun hasAttended(sessionId: String, uid: String): Boolean =
         db.collection(ATTENDANCES).document(attendanceId(sessionId, uid)).get().await().exists()
 
-    /** Memakai transaksi supaya absen dua kali di sesi yang sama pasti ditolak. */
-    override suspend fun save(attendance: Attendance): Result<Unit> = try {
+    /**
+     * Memakai transaksi supaya absen dua kali di sesi yang sama pasti ditolak.
+     * Foto bukti (kalau ada) ditulis di transaksi yang sama, jadi tidak ada foto tanpa absen.
+     */
+    override suspend fun save(attendance: Attendance, proof: Proof?): Result<Unit> = try {
         val ref = db.collection(ATTENDANCES).document(attendance.id)
         db.runTransaction { tx ->
             if (tx.get(ref).exists()) throw IllegalStateException("Kamu sudah absen di sesi ini.")
             tx.set(ref, attendance.toMap())
+            if (proof != null) tx.set(db.collection(PROOFS).document(proof.id), proof.toMap())
             null
         }.await()
         Result.success(Unit)
@@ -225,6 +231,9 @@ class FirestoreAttendanceRepository(
             .firstOrNull { it.contains("sudah absen") }
         Result.failure(IllegalStateException(pesan ?: e.message ?: "Gagal menyimpan absen."))
     }
+
+    override suspend fun proofOf(sessionId: String, studentId: String): Proof? =
+        db.collection(PROOFS).document(attendanceId(sessionId, studentId)).get().await().toProof()
 
     override suspend fun saveAttempt(attempt: Attempt) {
         db.collection(ATTEMPTS).add(attempt.toMap()).await()
@@ -246,6 +255,14 @@ class FirestoreAttendanceRepository(
         val ref = db.collection(ATTENDANCES).document(attendanceId(sessionId, studentId))
         if (status == null) {
             ref.delete().await() // Alpa = tidak ada dokumen
+            // Foto bukti ikut dihapus; kalau gagal (misalnya tidak ada) tidak apa-apa
+            try {
+                db.collection(PROOFS).document(attendanceId(sessionId, studentId)).delete().await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // abaikan
+            }
             return
         }
         if (ref.get().await().exists()) {
