@@ -44,8 +44,10 @@ fun BukaSesi(
         ).show()
     }
 
+    val sekarang = jamSekarang()
     val jamValid = jamSelesai > jamMulai // format HH:mm, aman dibandingkan sebagai teks
-    val bisaBuka = terpilih != null && jamValid
+    val belumLewat = jamSelesai > sekarang
+    val bisaBuka = terpilih != null && jamValid && belumLewat
 
     Scaffold(
         modifier,
@@ -89,7 +91,11 @@ fun BukaSesi(
                         )
                     }
                 }
-                if (!jamValid) ErrorText("Jam selesai harus setelah jam mulai.")
+                if (!jamValid) {
+                    ErrorText("Jam selesai harus setelah jam mulai.")
+                } else if (!belumLewat) {
+                    ErrorText("Jam selesai sudah berlalu. Pilih jam yang lebih dari waktu saat ini.")
+                }
                 HelperText(
                     "Mahasiswa hanya bisa absen di antara jam mulai dan jam selesai. " +
                         "Yang belum absen saat sesi berakhir tercatat Alpa."
@@ -102,6 +108,13 @@ fun BukaSesi(
             }
         }
     }
+}
+
+private fun jamSekarang(): String {
+    val now = Calendar.getInstance()
+    val jam = now.get(Calendar.HOUR_OF_DAY)
+    val menit = now.get(Calendar.MINUTE)
+    return "%02d:%02d".format(jam, menit)
 }
 
 private fun jamDefault(): Pair<String, String> {

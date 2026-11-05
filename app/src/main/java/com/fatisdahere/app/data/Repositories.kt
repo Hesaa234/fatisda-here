@@ -52,6 +52,8 @@ interface CourseRepository {
     suspend fun addCourse(course: Course): Course
     suspend fun updateCourse(course: Course)
     suspend fun setStudents(courseId: String, studentIds: List<String>)
+    suspend fun addStudent(courseId: String, studentId: String)
+    suspend fun removeStudent(courseId: String, studentId: String)
 }
 
 interface SessionRepository {

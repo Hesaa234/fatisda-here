@@ -23,6 +23,7 @@ import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.cancellation.CancellationException
@@ -159,6 +160,18 @@ class FirestoreCourseRepository(
 
     override suspend fun setStudents(courseId: String, studentIds: List<String>) {
         db.collection(COURSES).document(courseId).update("studentIds", studentIds.distinct()).await()
+    }
+
+    override suspend fun addStudent(courseId: String, studentId: String) {
+        db.collection(COURSES).document(courseId)
+            .update("studentIds", FieldValue.arrayUnion(studentId))
+            .await()
+    }
+
+    override suspend fun removeStudent(courseId: String, studentId: String) {
+        db.collection(COURSES).document(courseId)
+            .update("studentIds", FieldValue.arrayRemove(studentId))
+            .await()
     }
 }
 
