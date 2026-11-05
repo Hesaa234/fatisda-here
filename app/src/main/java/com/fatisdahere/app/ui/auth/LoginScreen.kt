@@ -1,6 +1,8 @@
 package com.fatisdahere.app.ui.auth
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -28,8 +30,11 @@ fun LoginScreen(
     infoMessage: String? = null
 ) {
     Scaffold(modifier, topBar = { FatisdaTopBar() }, containerColor = PageBackground) { padding ->
+        // Scroll + imePadding: tombol "Masuk" tetap terjangkau saat keyboard muncul.
+        // heightIn(min = maxHeight) menjaga form tetap di tengah saat keyboard tertutup.
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).imePadding()) {
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            Modifier.fillMaxWidth().heightIn(min = maxHeight).verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.Center
         ) {
             SectionCard("Masuk") {
@@ -68,6 +73,7 @@ fun LoginScreen(
                 )
                 if (infoMessage != null) HelperText(infoMessage, color = UnsBlue)
             }
+        }
         }
     }
 }

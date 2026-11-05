@@ -25,7 +25,8 @@ fun StudentHomeScreen(
     onAbsenClick: (SessionUi) -> Unit,
     onCourseClick: (SessionUi) -> Unit,
     onProfileClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sudahAbsen: Boolean = false
 ) {
     Scaffold(
         modifier,
@@ -46,7 +47,11 @@ fun StudentHomeScreen(
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             LiveBadge()
                             SessionInfo(activeSession)
-                            PrimaryButton("Absen", { onAbsenClick(activeSession) })
+                            PrimaryButton(
+                                if (sudahAbsen) "Sudah Absen ✓" else "Absen",
+                                { onAbsenClick(activeSession) },
+                                enabled = !sudahAbsen
+                            )
                         }
                     }
                 }

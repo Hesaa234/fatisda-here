@@ -1,0 +1,177 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 1c34ec4..9486372 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -8,13 +8,17 @@
+ 
+     <application
+         android:allowBackup="true"
++        android:icon="@mipmap/ic_launcher"
++        android:roundIcon="@mipmap/ic_launcher_round"
+         android:label="@string/app_name"
+         android:supportsRtl="true"
+         android:theme="@style/Theme.FatisdaHere">
+ 
+         <activity
+             android:name=".MainActivity"
+-            android:exported="true">
++            android:exported="true"
++            android:screenOrientation="portrait"
++            android:windowSoftInputMode="adjustResize">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+diff --git a/app/src/main/java/com/fatisdahere/app/ui/MainActivity.kt b/app/src/main/java/com/fatisdahere/app/ui/MainActivity.kt
+index ffa7720..d825354 100644
+--- a/app/src/main/java/com/fatisdahere/app/ui/MainActivity.kt
++++ b/app/src/main/java/com/fatisdahere/app/ui/MainActivity.kt
+@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.material3.Surface
+ import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.listSaver
++import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.ui.Modifier
+ import com.fatisdahere.app.data.AppUser
+ import com.fatisdahere.app.data.Role
+@@ -45,11 +47,26 @@ class MainActivity : ComponentActivity() {
+     }
+ }
+ 
++/** AppUser bukan Parcelable, jadi disimpan sebagai daftar string agar selamat dari recreate Activity. */
++private val AppUserSaver = listSaver<AppUser?, String>(
++    save = { u ->
++        if (u == null) emptyList()
++        else listOf(u.uid, u.name, u.email, u.role.name, u.nim.orEmpty(), u.nip.orEmpty())
++    },
++    restore = { l ->
++        if (l.isEmpty()) null
++        else AppUser(
++            uid = l[0], name = l[1], email = l[2], role = Role.valueOf(l[3]),
++            nim = l[4].ifEmpty { null }, nip = l[5].ifEmpty { null }
++        )
++    }
++)
++
+ /** Login, lalu arahkan ke halaman sesuai role akun. */
+ @Composable
+ private fun FatisdaApp(container: AppContainer) {
+-    var user by remember { mutableStateOf<AppUser?>(null) }
+-    var email by remember { mutableStateOf("") }
++    var user by rememberSaveable(stateSaver = AppUserSaver) { mutableStateOf<AppUser?>(null) }
++    var email by rememberSaveable { mutableStateOf("") }
+     var password by remember { mutableStateOf("") }
+     var isLoading by remember { mutableStateOf(false) }
+     var error by remember { mutableStateOf<String?>(null) }
+diff --git a/app/src/main/java/com/fatisdahere/app/ui/auth/LoginScreen.kt b/app/src/main/java/com/fatisdahere/app/ui/auth/LoginScreen.kt
+index 812cd4a..b61d49c 100644
+--- a/app/src/main/java/com/fatisdahere/app/ui/auth/LoginScreen.kt
++++ b/app/src/main/java/com/fatisdahere/app/ui/auth/LoginScreen.kt
+@@ -1,6 +1,8 @@
+ package com.fatisdahere.app.ui.auth
+ 
+ import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.text.KeyboardOptions
+ import androidx.compose.material3.*
+@@ -28,8 +30,11 @@ fun LoginScreen(
+     infoMessage: String? = null
+ ) {
+     Scaffold(modifier, topBar = { FatisdaTopBar() }, containerColor = PageBackground) { padding ->
++        // Scroll + imePadding: tombol "Masuk" tetap terjangkau saat keyboard muncul.
++        // heightIn(min = maxHeight) menjaga form tetap di tengah saat keyboard tertutup.
++        BoxWithConstraints(Modifier.fillMaxSize().padding(padding).imePadding()) {
+         Column(
+-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
++            Modifier.fillMaxWidth().heightIn(min = maxHeight).verticalScroll(rememberScrollState()).padding(20.dp),
+             verticalArrangement = Arrangement.Center
+         ) {
+             SectionCard("Masuk") {
+@@ -69,6 +74,7 @@ fun LoginScreen(
+                 if (infoMessage != null) HelperText(infoMessage, color = UnsBlue)
+             }
+         }
++        }
+     }
+ }
+ 
+diff --git a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/MahasiswaApp.kt b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/MahasiswaApp.kt
+index e319bef..5bd437d 100644
+--- a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/MahasiswaApp.kt
++++ b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/MahasiswaApp.kt
+@@ -306,7 +306,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
+                 canAbsen = terbuka != null && !d.myAttendance.containsKey(terbuka.id),
+                 history = riwayat,
+                 onAbsenClick = { mulaiAbsen(uiHeader) },
+-                onBack = keHome
++                onBack = keHome,
++                sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id)
+             )
+         }
+ 
+@@ -342,7 +343,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
+                 courseIdTerpilih = it.courseId
+                 layar = LayarMahasiswa.COURSE_DETAIL
+             },
+-            onProfileClick = keProfil
++            onProfileClick = keProfil,
++            sudahAbsen = sesiTerbuka != null && d.myAttendance.containsKey(sesiTerbuka.second.id)
+         )
+     }
+ }
+diff --git a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentCourseDetailScreen.kt b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentCourseDetailScreen.kt
+index 44f380e..dc2f57d 100644
+--- a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentCourseDetailScreen.kt
++++ b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentCourseDetailScreen.kt
+@@ -26,7 +26,8 @@ fun StudentCourseDetailScreen(
+     history: List<AttendanceRecord>,
+     onAbsenClick: () -> Unit,
+     onBack: () -> Unit,
+-    modifier: Modifier = Modifier
++    modifier: Modifier = Modifier,
++    sudahAbsen: Boolean = false
+ ) {
+     Scaffold(
+         modifier,
+@@ -44,7 +45,11 @@ fun StudentCourseDetailScreen(
+                         Box(Modifier.weight(1f)) { SessionInfo(session) }
+                         StatusPill(currentStatus.label, currentStatus.color)
+                     }
+-                    if (canAbsen) PrimaryButton("Absen", onAbsenClick)
++                    if (canAbsen || sudahAbsen) PrimaryButton(
++                        if (sudahAbsen) "Sudah Absen ✓" else "Absen",
++                        onAbsenClick,
++                        enabled = !sudahAbsen
++                    )
+                 }
+             }
+             item {
+diff --git a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentHomeScreen.kt b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentHomeScreen.kt
+index 8bf4f3c..8894c9a 100644
+--- a/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentHomeScreen.kt
++++ b/app/src/main/java/com/fatisdahere/app/ui/mahasiswa/StudentHomeScreen.kt
+@@ -25,7 +25,8 @@ fun StudentHomeScreen(
+     onAbsenClick: (SessionUi) -> Unit,
+     onCourseClick: (SessionUi) -> Unit,
+     onProfileClick: () -> Unit,
+-    modifier: Modifier = Modifier
++    modifier: Modifier = Modifier,
++    sudahAbsen: Boolean = false
+ ) {
+     Scaffold(
+         modifier,
+@@ -46,7 +47,11 @@ fun StudentHomeScreen(
+                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                             LiveBadge()
+                             SessionInfo(activeSession)
+-                            PrimaryButton("Absen", { onAbsenClick(activeSession) })
++                            PrimaryButton(
++                                if (sudahAbsen) "Sudah Absen ✓" else "Absen",
++                                { onAbsenClick(activeSession) },
++                                enabled = !sudahAbsen
++                            )
+                         }
+                     }
+                 }

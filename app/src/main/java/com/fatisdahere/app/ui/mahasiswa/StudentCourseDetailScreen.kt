@@ -26,7 +26,8 @@ fun StudentCourseDetailScreen(
     history: List<AttendanceRecord>,
     onAbsenClick: () -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    sudahAbsen: Boolean = false
 ) {
     Scaffold(
         modifier,
@@ -44,7 +45,11 @@ fun StudentCourseDetailScreen(
                         Box(Modifier.weight(1f)) { SessionInfo(session) }
                         StatusPill(currentStatus.label, currentStatus.color)
                     }
-                    if (canAbsen) PrimaryButton("Absen", onAbsenClick)
+                    if (canAbsen || sudahAbsen) PrimaryButton(
+                        if (sudahAbsen) "Sudah Absen ✓" else "Absen",
+                        onAbsenClick,
+                        enabled = !sudahAbsen
+                    )
                 }
             }
             item {

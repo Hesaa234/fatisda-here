@@ -306,7 +306,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 canAbsen = terbuka != null && !d.myAttendance.containsKey(terbuka.id),
                 history = riwayat,
                 onAbsenClick = { mulaiAbsen(uiHeader) },
-                onBack = keHome
+                onBack = keHome,
+                sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id)
             )
         }
 
@@ -342,7 +343,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 courseIdTerpilih = it.courseId
                 layar = LayarMahasiswa.COURSE_DETAIL
             },
-            onProfileClick = keProfil
+            onProfileClick = keProfil,
+            sudahAbsen = sesiTerbuka != null && d.myAttendance.containsKey(sesiTerbuka.second.id)
         )
     }
 }
