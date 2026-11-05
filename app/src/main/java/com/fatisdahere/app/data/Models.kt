@@ -138,3 +138,42 @@ data class Attempt(
     val displacementM: Double? = null,
     val createdAtMs: Long = System.currentTimeMillis(),
 )
+
+/** Label posisi penguji saat tes KNN: benar-benar di dalam ruangan, atau sengaja di luar (koridor, ruang sebelah). */
+enum class TestPosition(val value: String, val label: String) {
+    DALAM("dalam", "Dalam"),
+    LUAR("luar", "Luar");
+
+    companion object {
+        fun from(value: String?): TestPosition? = values().firstOrNull { it.value == value }
+    }
+}
+
+/** Satu scan Wi-Fi mentah yang disimpan untuk kalibrasi: bssid -> RSSI (dBm). */
+data class RawScan(val timeMs: Long, val readings: Map<String, Int>)
+
+/**
+ * Dokumen knnTests/{autoId}: satu kali uji KNN oleh admin di lapangan (menu Tes KNN).
+ * Scan mentah ikut disimpan supaya hasilnya bisa dihitung ulang dengan batas lain,
+ * dan nantinya bisa dipakai menambah titik fingerprint (misalnya titik "luar").
+ */
+data class KnnTest(
+    val id: String = "",
+    val roomId: String,
+    val position: TestPosition,
+    val note: String,
+    val scans: List<RawScan>,
+    val accepted: Boolean,
+    val reason: String?,
+    val validScans: Int,
+    val avgDistance: Double?,
+    val rssiMin: Int,
+    val distanceMax: Double,
+    val staleScans: Int,
+    /** Ringkasan per scan agar mudah dibaca di Firebase Console. */
+    val summaries: List<String> = emptyList(),
+    val fingerprintVersion: String = "",
+    val deviceModel: String = "",
+    val testerId: String = "",
+    val createdAtMs: Long = System.currentTimeMillis(),
+)

@@ -5,6 +5,8 @@ import com.fatisdahere.app.data.AttendanceRepository
 import com.fatisdahere.app.data.AuthRepository
 import com.fatisdahere.app.data.CourseRepository
 import com.fatisdahere.app.data.FingerprintLoader
+import com.fatisdahere.app.data.KalibrasiLokal
+import com.fatisdahere.app.data.KalibrasiRepository
 import com.fatisdahere.app.data.RoomRepository
 import com.fatisdahere.app.data.SessionRepository
 import com.fatisdahere.app.data.UserRepository
@@ -13,11 +15,13 @@ import com.fatisdahere.app.data.fake.FakeAttendanceRepository
 import com.fatisdahere.app.data.fake.FakeAuthRepository
 import com.fatisdahere.app.data.fake.FakeCourseRepository
 import com.fatisdahere.app.data.fake.FakeDatabase
+import com.fatisdahere.app.data.fake.FakeKalibrasiRepository
 import com.fatisdahere.app.data.fake.FakeRoomRepository
 import com.fatisdahere.app.data.fake.FakeSessionRepository
 import com.fatisdahere.app.data.fake.FakeUserRepository
 import com.fatisdahere.app.data.firestore.FirestoreAttendanceRepository
 import com.fatisdahere.app.data.firestore.FirestoreCourseRepository
+import com.fatisdahere.app.data.firestore.FirestoreKalibrasiRepository
 import com.fatisdahere.app.data.firestore.FirestoreRoomRepository
 import com.fatisdahere.app.data.firestore.FirestoreSessionRepository
 import com.fatisdahere.app.data.firestore.FirestoreUserRepository
@@ -46,6 +50,9 @@ class AppContainer(context: Context) {
     val positioningEngine: KnnPositioningEngine by lazy { KnnPositioningEngine(fingerprint, positioningParams) }
     val wifiScanner: AndroidWifiScanner by lazy { AndroidWifiScanner(appContext, fingerprint.ssid) }
 
+    /** Batas KNN sementara untuk menu Tes KNN admin (hanya di HP ini, tidak dipakai absen mahasiswa). */
+    val kalibrasiLokal: KalibrasiLokal by lazy { KalibrasiLokal(appContext) }
+
     // ---------- Data ----------
     private val fakeDb by lazy { FakeDatabase() }
 
@@ -66,5 +73,8 @@ class AppContainer(context: Context) {
     }
     val attendanceRepository: AttendanceRepository by lazy {
         if (PAKAI_FIREBASE) FirestoreAttendanceRepository() else FakeAttendanceRepository(fakeDb)
+    }
+    val kalibrasiRepository: KalibrasiRepository by lazy {
+        if (PAKAI_FIREBASE) FirestoreKalibrasiRepository() else FakeKalibrasiRepository(fakeDb)
     }
 }
