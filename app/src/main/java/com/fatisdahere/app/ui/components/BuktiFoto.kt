@@ -59,10 +59,12 @@ object BuktiFoto {
     fun kompres(context: Context, uri: Uri): String {
         val resolver = context.contentResolver
 
-        // 1. Baca ukuran asli saja (belum memuat gambarnya)
+        // 1. Baca ukuran asli saja (belum memuat gambarnya).
+        // Catatan: dengan inJustDecodeBounds, decodeStream SELALU mengembalikan null dan hanya
+        // mengisi outWidth/outHeight, jadi yang dicek di sini hanya apakah file bisa dibuka.
         val ukuran = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, ukuran) }
-            ?: throw IllegalArgumentException("Foto tidak bisa dibuka.")
+        val aliran = resolver.openInputStream(uri) ?: throw IllegalArgumentException("Foto tidak bisa dibuka.")
+        aliran.use { BitmapFactory.decodeStream(it, null, ukuran) }
         if (ukuran.outWidth <= 0 || ukuran.outHeight <= 0) {
             throw IllegalArgumentException("File yang dipilih bukan foto.")
         }
