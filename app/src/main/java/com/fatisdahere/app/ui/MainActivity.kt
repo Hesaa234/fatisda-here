@@ -1,11 +1,14 @@
 package com.fatisdahere.app
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import com.fatisdahere.app.data.AppUser
 import com.fatisdahere.app.data.Role
@@ -45,11 +48,26 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** AppUser bukan Parcelable, jadi disimpan sebagai daftar string agar selamat dari recreate Activity. */
+private val AppUserSaver = listSaver<AppUser?, String>(
+    save = { u ->
+        if (u == null) emptyList()
+        else listOf(u.uid, u.name, u.email, u.role.name, u.nim.orEmpty(), u.nip.orEmpty())
+    },
+    restore = { l ->
+        if (l.isEmpty()) null
+        else AppUser(
+            uid = l[0], name = l[1], email = l[2], role = Role.valueOf(l[3]),
+            nim = l[4].ifEmpty { null }, nip = l[5].ifEmpty { null }
+        )
+    }
+)
+
 /** Login, lalu arahkan ke halaman sesuai role akun. */
 @Composable
 private fun FatisdaApp(container: AppContainer) {
-    var user by remember { mutableStateOf<AppUser?>(null) }
-    var email by remember { mutableStateOf("") }
+    var user by rememberSaveable(stateSaver = AppUserSaver) { mutableStateOf<AppUser?>(null) }
+    var email by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -78,9 +96,17 @@ private fun FatisdaApp(container: AppContainer) {
                 scope.launch {
                     isLoading = true
                     error = null
-                    container.authRepository.signIn(email.trim(), password)
+
+                    // Email: hapus spasi di awal/akhir dan jadikan huruf kecil.
+                    // Kata sandi TIDAK di-trim karena spasi bisa jadi bagian dari kata sandi.
+                    val cleanEmail = email.trim().lowercase()
+
+                    container.authRepository.signIn(cleanEmail, password)
                         .onSuccess { user = it }
-                        .onFailure { error = it.message ?: "Gagal masuk." }
+                        .onFailure { err ->
+                            Log.e("FatisdaAuth", "Login gagal: ${err.message}", err)
+                            error = err.message ?: "Gagal masuk. Periksa email/username dan kata sandi."
+                        }
                     isLoading = false
                 }
             },
