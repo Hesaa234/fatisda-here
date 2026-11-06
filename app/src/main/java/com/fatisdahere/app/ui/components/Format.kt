@@ -1,6 +1,7 @@
 package com.fatisdahere.app.ui.components
 
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.positioning.RejectReason
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -54,4 +55,14 @@ fun AttendanceStatus.toPresence(): PresenceStatus? = when (this) {
     AttendanceStatus.Izin -> PresenceStatus.IZIN
     AttendanceStatus.Sakit -> PresenceStatus.SAKIT
     AttendanceStatus.Alpa, AttendanceStatus.BelumAbsen -> null
+}
+
+/** Alasan absen ditolak engine KNN, dalam bahasa yang dimengerti mahasiswa. */
+fun RejectReason.pesan(namaRuang: String, ssid: String): String = when (this) {
+    RejectReason.NO_SIGNAL -> "Wi-Fi $ssid tidak terdeteksi. Pastikan Wi-Fi dan lokasi aktif."
+    RejectReason.ROOM_AP_NOT_DOMINANT -> "Kamu tidak terdeteksi di ruangan $namaRuang."
+    RejectReason.RSSI_TOO_WEAK -> "Sinyal ruangan terlalu lemah. Masuk lebih ke dalam ruangan."
+    RejectReason.WRONG_ROOM -> "Kamu terdeteksi di ruangan lain."
+    RejectReason.TOO_FAR -> "Posisimu belum terkonfirmasi di dalam ruangan. Coba lagi."
+    RejectReason.MOVING -> "Tetap diam saat proses absen, lalu coba lagi."
 }

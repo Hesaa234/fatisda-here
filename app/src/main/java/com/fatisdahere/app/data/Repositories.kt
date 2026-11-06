@@ -73,12 +73,26 @@ interface SessionRepository {
 interface AttendanceRepository {
     suspend fun hasAttended(sessionId: String, uid: String): Boolean
 
-    /** Gagal kalau mahasiswa sudah absen di sesi itu. */
-    suspend fun save(attendance: Attendance): Result<Unit>
+    /**
+     * Gagal kalau mahasiswa sudah absen di sesi itu.
+     * proof (foto bukti Izin/Sakit) disimpan bersamaan: tersimpan keduanya atau tidak sama sekali.
+     */
+    suspend fun save(attendance: Attendance, proof: Proof? = null): Result<Unit>
+
+    /** Foto bukti Izin/Sakit seorang mahasiswa di satu sesi, null kalau tidak ada. */
+    suspend fun proofOf(sessionId: String, studentId: String): Proof?
     suspend fun saveAttempt(attempt: Attempt)
     suspend fun forSessions(sessionIds: List<String>): List<Attendance>
     suspend fun forStudent(uid: String): List<Attendance>
 
     /** Dipakai dosen di Rekap Kehadiran. status null = Alpa (dokumen dihapus). */
     suspend fun setManualStatus(sessionId: String, courseId: String, studentId: String, status: PresenceStatus?)
+}
+
+/** Hasil uji KNN di lapangan (menu Tes KNN admin). */
+interface KalibrasiRepository {
+    /** Mengembalikan id dokumen yang dibuat. */
+    suspend fun saveTest(test: KnnTest): String
+    suspend fun testsForRoom(roomId: String): List<KnnTest>
+    suspend fun deleteTest(id: String)
 }

@@ -87,6 +87,32 @@ service cloud.firestore {
       allow delete: if isAdmin() || isLecturerOf(resource.data.courseId);
     }
 
+    // ---------- proofs (foto bukti Izin/Sakit, id = sessionId_uid) ----------
+    // Foto disimpan sebagai teks Base64 di dokumen ini (bukan Firebase Storage).
+    match /proofs/{proofId} {
+      // Mahasiswa mengunggah bukti miliknya sendiri; ukuran dibatasi supaya dokumen tidak melebihi 1 MiB
+      allow create: if isMahasiswa()
+        && request.resource.data.studentId == request.auth.uid
+        && proofId == request.resource.data.sessionId + '_' + request.auth.uid
+        && request.resource.data.imageBase64 is string
+        && request.resource.data.imageBase64.size() <= 900000;
+
+      // Yang boleh melihat: pemilik, dosen pengampu matkul, admin
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.studentId == request.auth.uid)
+        || isLecturerOf(resource.data.courseId);
+
+      // Dihapus saat dosen mengubah status jadi Alpa
+      allow delete: if isAdmin() || isLecturerOf(resource.data.courseId);
+      allow update: if false;
+    }
+
+    // ---------- knnTests (uji KNN di lapangan dari menu admin) ----------
+    match /knnTests/{testId} {
+      allow read, create, delete: if isAdmin();
+      allow update: if false;
+    }
+
     // ---------- attempts ----------
     match /attempts/{attemptId} {
       allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;

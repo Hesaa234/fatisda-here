@@ -22,7 +22,8 @@ fun PantauSesi(
     onTutupSesi: () -> Unit,
     onBack: () -> Unit,
     onProfileClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLihatKeterangan: (KehadiranMahasiswa) -> Unit = {}
 ) {
     var tampilDialog by remember { mutableStateOf(false) }
     val hadir = daftarKehadiran.count { it.status == AttendanceStatus.Hadir }
@@ -61,7 +62,7 @@ fun PantauSesi(
             }
             item { SectionTitle("Daftar Kehadiran") }
             if (daftarKehadiran.isEmpty()) item { HelperText("Belum ada peserta.") }
-            items(daftarKehadiran) { KartuMahasiswa(it) }
+            items(daftarKehadiran) { KartuMahasiswa(it) { onLihatKeterangan(it) } }
         }
     }
 
@@ -80,11 +81,12 @@ fun PantauSesi(
 }
 
 @Composable
-private fun KartuMahasiswa(m: KehadiranMahasiswa) {
+private fun KartuMahasiswa(m: KehadiranMahasiswa, onLihat: () -> Unit) {
     ItemCard {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(m.nama)
             ItemSubtitle(m.nim)
+            KeteranganRingkas(m.keterangan, m.adaBukti, onLihat)
         }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -103,7 +105,7 @@ private fun PantauSesiPreview() {
             sesi = SesiAktif("WMC-A", "Wireless & Mobile Computing", "13:00 - 15:00", "LAB 2 UPT", 2, 3),
             daftarKehadiran = listOf(
                 KehadiranMahasiswa("Andi Pratama", "M0523001", AttendanceStatus.Hadir, "13:02"),
-                KehadiranMahasiswa("Budi Santoso", "M0523002", AttendanceStatus.Izin, "13:05"),
+                KehadiranMahasiswa("Budi Santoso", "M0523002", AttendanceStatus.Izin, "13:05", keterangan = "Acara keluarga di luar kota", adaBukti = true),
                 KehadiranMahasiswa("Citra Lestari", "M0523003")
             ),
             onTutupSesi = {}, onBack = {}, onProfileClick = {}

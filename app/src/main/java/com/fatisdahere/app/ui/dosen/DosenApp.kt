@@ -1,4 +1,3 @@
-
 package com.fatisdahere.app.ui.dosen
 
 import androidx.activity.compose.BackHandler
@@ -69,6 +68,27 @@ private suspend fun muatDataDosen(c: AppContainer, uid: String): DataDosen {
     return DataDosen(courses, rooms, users, semuaMahasiswa, sessions, attendances)
 }
 
+/** Keterangan Sakit/Izin yang sedang dibuka dosen di dialog. */
+private data class BuktiTerbuka(
+    val sessionId: String,
+    val uid: String,
+    val judul: String,
+    val keterangan: String?,
+    val adaBukti: Boolean
+)
+
+/**
+ * Alur dosen:
+ * Beranda -> Tambah Mata Kuliah
+ * Beranda -> Detail Matkul -> Buka Sesi Absen -> Beranda (sesi aktif muncul)
+ *                          -> Kelola Peserta
+ *                          -> Rekap Kehadiran
+ *                          -> Edit Matkul
+ * Beranda -> Pantau Sesi -> (Tutup sesi) -> Beranda
+ * Header (nama di kanan atas) -> Profil -> Log Out
+ *
+ * Data diambil dari repository di AppContainer (sekarang data dummy, nanti Firebase).
+ */
 @Composable
 fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
@@ -77,9 +97,9 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var versi by remember { mutableStateOf(0) }
     var data by remember { mutableStateOf<DataDosen?>(null) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    var galatMuat by remember { mutableStateOf<String?>(null) }
-    var galatAksi by remember { mutableStateOf<String?>(null) }
-
+    var galatMuat by remember { mutableStateOf<String?>(null) } // gagal memuat data
+    var galatAksi by remember { mutableStateOf<String?>(null) } // gagal menyimpan perubahan
+    var buktiTerbuka by remember { mutableStateOf<BuktiTerbuka?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(user.uid, versi) {
@@ -106,6 +126,17 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     galatAksi?.let {
         ErrorDialog(it) { galatAksi = null }
+    }
+
+    buktiTerbuka?.let { b ->
+        BuktiDialog(
+            judul = b.judul,
+            keterangan = b.keterangan,
+            muatFoto = {
+                if (b.adaBukti) container.attendanceRepository.proofOf(b.sessionId, b.uid)?.imageBase64 else null
+            },
+            onDismiss = { buktiTerbuka = null }
+        )
     }
 
     // Perbarui data kehadiran setiap 10 detik di halaman Pantau Sesi.
@@ -282,8 +313,14 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                     nama = u.name,
                     nim = u.nim ?: "-",
                     status = a?.status?.toUi() ?: AttendanceStatus.BelumAbsen,
-                    jam = a?.let { formatJam(it.createdAtMs) }
+                    jam = a?.let { formatJam(it.createdAtMs) },
+                    uid = u.uid,
+                    keterangan = a?.note,
+                    adaBukti = a?.hasProof == true
                 )
+            },
+            onLihatKeterangan = { m ->
+                buktiTerbuka = BuktiTerbuka(sesiBerjalan.id, m.uid, "${m.status.label} · ${m.nama}", m.keterangan, m.adaBukti)
             },
             onTutupSesi = {
                 ubah {
@@ -451,9 +488,14 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                             ?: if (selesai) AttendanceStatus.Alpa
                             else AttendanceStatus.BelumAbsen,
                         manual = a?.method == AttendanceMethod.MANUAL,
-                        uid = u.uid
+                        uid = u.uid,
+                        keterangan = a?.note,
+                        adaBukti = a?.hasProof == true
                     )
                 }
+            },
+            onLihatKeterangan = { p, c ->
+                buktiTerbuka = BuktiTerbuka(p.sessionId, c.uid, "${c.status.label} · ${c.nama}", c.keterangan, c.adaBukti)
             },
             onUbahStatus = { p, uid, status ->
                 ubah {

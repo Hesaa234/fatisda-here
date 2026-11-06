@@ -6,7 +6,11 @@ import com.fatisdahere.app.data.Attendance
 import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
+import com.fatisdahere.app.data.KnnTest
+import com.fatisdahere.app.data.RawScan
+import com.fatisdahere.app.data.TestPosition
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
 import com.google.firebase.Timestamp
@@ -106,6 +110,8 @@ internal fun DocumentSnapshot.toAttendance(): Attendance? {
         displacementM = getDouble("displacementM"),
         fingerprintVersion = getString("fingerprintVersion"),
         deviceModel = getString("deviceModel"),
+        note = getString("note"),
+        hasProof = getBoolean("hasProof") ?: false,
         createdAtMs = ms("createdAt") ?: 0L,
     )
 }
@@ -123,8 +129,29 @@ internal fun Attendance.toMap(): Map<String, Any> = buildMap {
     displacementM?.let { put("displacementM", it) }
     fingerprintVersion?.let { put("fingerprintVersion", it) }
     deviceModel?.let { put("deviceModel", it) }
+    note?.let { put("note", it) }
+    if (hasProof) put("hasProof", true)
     put("createdAt", ts(createdAtMs))
 }
+
+internal fun DocumentSnapshot.toProof(): Proof? {
+    if (!exists()) return null
+    return Proof(
+        sessionId = getString("sessionId") ?: return null,
+        courseId = getString("courseId") ?: return null,
+        studentId = getString("studentId") ?: return null,
+        imageBase64 = getString("imageBase64") ?: return null,
+        createdAtMs = ms("createdAt") ?: 0L,
+    )
+}
+
+internal fun Proof.toMap(): Map<String, Any> = mapOf(
+    "sessionId" to sessionId,
+    "courseId" to courseId,
+    "studentId" to studentId,
+    "imageBase64" to imageBase64,
+    "createdAt" to ts(createdAtMs),
+)
 
 internal fun Attempt.toMap(): Map<String, Any> = buildMap {
     put("sessionId", sessionId)
@@ -135,4 +162,56 @@ internal fun Attempt.toMap(): Map<String, Any> = buildMap {
     validScans?.let { put("validScans", it) }
     displacementM?.let { put("displacementM", it) }
     put("createdAt", ts(createdAtMs))
+}
+
+internal fun KnnTest.toMap(): Map<String, Any> = buildMap {
+    put("roomId", roomId)
+    put("position", position.value)
+    put("note", note)
+    put("scans", scans.map { mapOf("time" to ts(it.timeMs), "readings" to it.readings) })
+    put("accepted", accepted)
+    reason?.let { put("reason", it) }
+    put("validScans", validScans)
+    avgDistance?.takeIf { !it.isNaN() }?.let { put("avgDistance", it) }
+    put("rssiMin", rssiMin)
+    put("distanceMax", distanceMax)
+    put("staleScans", staleScans)
+    put("summaries", summaries)
+    put("fingerprintVersion", fingerprintVersion)
+    put("deviceModel", deviceModel)
+    put("testerId", testerId)
+    put("createdAt", ts(createdAtMs))
+}
+
+internal fun DocumentSnapshot.toKnnTest(): KnnTest? {
+    if (!exists()) return null
+    val scans = (get("scans") as? List<*>).orEmpty().mapNotNull { item ->
+        val m = item as? Map<*, *> ?: return@mapNotNull null
+        val time = (m["time"] as? Timestamp)?.toDate()?.time ?: 0L
+        val readings = (m["readings"] as? Map<*, *>).orEmpty().mapNotNull { (k, v) ->
+            val bssid = k as? String ?: return@mapNotNull null
+            val rssi = (v as? Number)?.toInt() ?: return@mapNotNull null
+            bssid to rssi
+        }.toMap()
+        RawScan(time, readings)
+    }
+    return KnnTest(
+        id = id,
+        roomId = getString("roomId") ?: return null,
+        position = TestPosition.from(getString("position")) ?: return null,
+        note = getString("note") ?: "",
+        scans = scans,
+        accepted = getBoolean("accepted") ?: false,
+        reason = getString("reason"),
+        validScans = getLong("validScans")?.toInt() ?: 0,
+        avgDistance = getDouble("avgDistance"),
+        rssiMin = getLong("rssiMin")?.toInt() ?: 0,
+        distanceMax = getDouble("distanceMax") ?: 0.0,
+        staleScans = getLong("staleScans")?.toInt() ?: 0,
+        summaries = (get("summaries") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+        fingerprintVersion = getString("fingerprintVersion") ?: "",
+        deviceModel = getString("deviceModel") ?: "",
+        testerId = getString("testerId") ?: "",
+        createdAtMs = ms("createdAt") ?: 0L,
+    )
 }

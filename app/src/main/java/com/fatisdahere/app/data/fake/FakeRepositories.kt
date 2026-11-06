@@ -9,8 +9,11 @@ import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.AuthRepository
 import com.fatisdahere.app.data.Course
 import com.fatisdahere.app.data.CourseRepository
+import com.fatisdahere.app.data.KalibrasiRepository
+import com.fatisdahere.app.data.KnnTest
 import com.fatisdahere.app.data.NewAccount
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
 import com.fatisdahere.app.data.RoomRepository
@@ -191,13 +194,22 @@ class FakeAttendanceRepository(private val db: FakeDatabase) : AttendanceReposit
         return db.attendances.any { it.id == attendanceId(sessionId, uid) }
     }
 
-    override suspend fun save(attendance: Attendance): Result<Unit> {
+    override suspend fun save(attendance: Attendance, proof: Proof?): Result<Unit> {
         simulasiJaringan()
         if (db.attendances.any { it.id == attendance.id }) {
             return Result.failure(IllegalStateException("Kamu sudah absen di sesi ini."))
         }
         db.attendances += attendance
+        if (proof != null) {
+            db.proofs.removeAll { it.id == proof.id }
+            db.proofs += proof
+        }
         return Result.success(Unit)
+    }
+
+    override suspend fun proofOf(sessionId: String, studentId: String): Proof? {
+        simulasiJaringan()
+        return db.proofs.firstOrNull { it.id == attendanceId(sessionId, studentId) }
     }
 
     override suspend fun saveAttempt(attempt: Attempt) {
@@ -221,9 +233,31 @@ class FakeAttendanceRepository(private val db: FakeDatabase) : AttendanceReposit
         val id = attendanceId(sessionId, studentId)
         val idx = db.attendances.indexOfFirst { it.id == id }
         when {
-            status == null -> if (idx >= 0) db.attendances.removeAt(idx)
+            status == null -> {
+                if (idx >= 0) db.attendances.removeAt(idx)
+                db.proofs.removeAll { it.id == id }
+            }
             idx >= 0 -> db.attendances[idx] = db.attendances[idx].copy(status = status, method = AttendanceMethod.MANUAL)
             else -> db.attendances += Attendance(sessionId, courseId, studentId, status, AttendanceMethod.MANUAL)
         }
+    }
+}
+
+class FakeKalibrasiRepository(private val db: FakeDatabase) : KalibrasiRepository {
+    override suspend fun saveTest(test: KnnTest): String {
+        simulasiJaringan()
+        val id = "tes${db.knnTests.size + 1}"
+        db.knnTests += test.copy(id = id)
+        return id
+    }
+
+    override suspend fun testsForRoom(roomId: String): List<KnnTest> {
+        simulasiJaringan()
+        return db.knnTests.filter { it.roomId == roomId }
+    }
+
+    override suspend fun deleteTest(id: String) {
+        simulasiJaringan()
+        db.knnTests.removeAll { it.id == id }
     }
 }

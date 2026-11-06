@@ -17,7 +17,7 @@ import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-private enum class LayarAdmin { BERANDA, AKUN, TAMBAH_AKUN, MATKUL, TAMBAH_MATKUL, EDIT_MATKUL, PESERTA, RUANGAN, PROFIL }
+private enum class LayarAdmin { BERANDA, AKUN, TAMBAH_AKUN, MATKUL, TAMBAH_MATKUL, EDIT_MATKUL, PESERTA, RUANGAN, TES_KNN, PROFIL }
 
 private class DataAdmin(val users: List<AppUser>, val courses: List<Course>, val rooms: List<Room>) {
     val usersById = users.associateBy { it.uid }
@@ -37,6 +37,7 @@ private suspend fun muatDataAdmin(c: AppContainer) = DataAdmin(
  * Beranda -> Mata Kuliah -> Tambah Mata Kuliah
  *                        -> (pilih matkul) Edit Mata Kuliah -> Kelola Peserta
  * Beranda -> Ruangan (hanya lihat)
+ * Beranda -> Tes KNN & Kalibrasi (uji posisi di lapangan)
  * Header (nama di kanan atas) -> Profil -> Log Out
  */
 @Composable
@@ -230,6 +231,18 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             )
         }
 
+        layar == LayarAdmin.TES_KNN -> TesKnnScreen(
+            username = user.name,
+            userId = user.uid,
+            fingerprint = container.fingerprint,
+            defaultParams = container.positioningParams,
+            kalibrasi = container.kalibrasiLokal,
+            scanner = container.wifiScanner,
+            repository = container.kalibrasiRepository,
+            onBack = keBeranda,
+            onProfileClick = keProfil
+        )
+
         layar == LayarAdmin.RUANGAN -> DaftarRuangan(
             username = user.name,
             ruangan = d.rooms.map {
@@ -252,7 +265,8 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             },
             onMatkul = { layar = LayarAdmin.MATKUL },
             onRuangan = { layar = LayarAdmin.RUANGAN },
-            onProfileClick = keProfil
+            onProfileClick = keProfil,
+            onTesKnn = { layar = LayarAdmin.TES_KNN }
         )
     }
 }

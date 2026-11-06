@@ -23,7 +23,8 @@ data class SessionUi(
     val lecturer: String,
     // id data asli; kosong untuk data contoh di Preview
     val courseId: String = "",
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    val roomId: String = ""
 ) {
     val title get() = "($code) - $name"
 }

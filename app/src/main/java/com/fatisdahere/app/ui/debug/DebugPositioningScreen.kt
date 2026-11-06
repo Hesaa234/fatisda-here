@@ -1,10 +1,6 @@
 package com.fatisdahere.app.ui.debug
 
 import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.location.LocationManager
-import android.net.wifi.WifiManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -35,17 +31,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.core.location.LocationManagerCompat
 import com.fatisdahere.app.positioning.FingerprintData
 import com.fatisdahere.app.positioning.KnnPositioningEngine
 import com.fatisdahere.app.positioning.MotionSummary
 import com.fatisdahere.app.positioning.PositioningDecision
 import com.fatisdahere.app.positioning.PositioningParams
-import com.fatisdahere.app.positioning.RejectReason
 import com.fatisdahere.app.positioning.ScanEvaluation
 import com.fatisdahere.app.positioning.WifiScan
 import com.fatisdahere.app.sensing.AndroidWifiScanner
+import com.fatisdahere.app.sensing.hasLocationPermission
+import com.fatisdahere.app.sensing.wifiEnvironmentProblem
+import com.fatisdahere.app.ui.components.pesan
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -120,7 +116,7 @@ fun DebugPositioningScreen(
                 enabled = !scanning,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    val problem = environmentProblem(context)
+                    val problem = wifiEnvironmentProblem(context)
                     if (problem != null) {
                         errorMessage = problem
                         return@Button
@@ -172,7 +168,7 @@ private fun ResultSection(result: TestResult, fingerprint: FingerprintData, para
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            decision.reason?.let { Text(rejectMessage(it, targetName)) }
+            decision.reason?.let { Text(it.pesan(targetName, fingerprint.ssid)) }
             Text("Scan lolos: ${decision.validScans}/${result.scans.size} (minimal ${params.minValidScans})")
             Text("Perpindahan PDR: belum aktif (dianggap 0 m)")
             val guess = result.evaluations.mapNotNull { it.neighborRoomId }
@@ -260,24 +256,3 @@ private fun ScanCard(
 private fun passFail(ok: Boolean) = if (ok) "lolos" else "gagal"
 
 private fun fmt(value: Double) = String.format(Locale.US, "%.1f", value)
-
-private fun rejectMessage(reason: RejectReason, roomName: String) = when (reason) {
-    RejectReason.NO_SIGNAL -> "Wi-Fi UNS SOLO tidak terdeteksi. Pastikan Wi-Fi dan lokasi aktif."
-    RejectReason.ROOM_AP_NOT_DOMINANT -> "Kamu tidak terdeteksi di ruangan $roomName."
-    RejectReason.RSSI_TOO_WEAK -> "Sinyal ruangan terlalu lemah. Masuk lebih ke dalam ruangan."
-    RejectReason.WRONG_ROOM -> "Kamu terdeteksi di ruangan lain."
-    RejectReason.TOO_FAR -> "Posisimu belum terkonfirmasi di dalam ruangan. Coba lagi."
-    RejectReason.MOVING -> "Tetap diam saat proses absen, lalu coba lagi."
-}
-
-private fun hasLocationPermission(context: Context) =
-    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-        PackageManager.PERMISSION_GRANTED
-
-private fun environmentProblem(context: Context): String? {
-    val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    if (!wifi.isWifiEnabled) return "Wi-Fi mati. Nyalakan Wi-Fi terlebih dahulu."
-    val location = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    if (!LocationManagerCompat.isLocationEnabled(location)) return "Lokasi HP mati. Nyalakan lokasi agar scan Wi-Fi bisa dibaca."
-    return null
-}

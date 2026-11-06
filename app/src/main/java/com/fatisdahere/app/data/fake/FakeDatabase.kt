@@ -6,7 +6,9 @@ import com.fatisdahere.app.data.Attendance
 import com.fatisdahere.app.data.AttendanceMethod
 import com.fatisdahere.app.data.AttendanceSession
 import com.fatisdahere.app.data.Course
+import com.fatisdahere.app.data.KnnTest
 import com.fatisdahere.app.data.PresenceStatus
+import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.data.Room
 import java.util.Calendar
@@ -29,6 +31,8 @@ class FakeDatabase(nowMs: Long = System.currentTimeMillis()) {
     val sessions = mutableListOf<AttendanceSession>()
     val attendances = mutableListOf<Attendance>()
     val attempts = mutableListOf<Attempt>()
+    val proofs = mutableListOf<Proof>()
+    val knnTests = mutableListOf<KnnTest>()
 
     init {
         seedUsers()
