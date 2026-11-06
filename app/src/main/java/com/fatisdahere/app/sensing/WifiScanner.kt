@@ -66,7 +66,7 @@ class AndroidWifiScanner(context: Context, private val ssid: String) : WifiScann
         val readings = wifiManager.scanResults
             .filter { it.SSID == ssid }
             .map { WifiReading(it.BSSID.lowercase(), it.level) }
-        return WifiScan(readings, System.currentTimeMillis())
+        return WifiScan(readings, System.currentTimeMillis(), fresh)
     }
 
     private companion object {

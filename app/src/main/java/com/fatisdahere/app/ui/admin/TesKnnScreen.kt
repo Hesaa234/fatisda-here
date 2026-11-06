@@ -31,11 +31,14 @@ import com.fatisdahere.app.data.RawScan
 import com.fatisdahere.app.data.TestPosition
 import com.fatisdahere.app.positioning.FingerprintData
 import com.fatisdahere.app.positioning.KnnPositioningEngine
+import com.fatisdahere.app.positioning.MotionSummary
 import com.fatisdahere.app.positioning.PositioningParams
 import com.fatisdahere.app.positioning.ScanEvaluation
 import com.fatisdahere.app.positioning.WifiReading
 import com.fatisdahere.app.positioning.WifiScan
 import com.fatisdahere.app.sensing.AndroidWifiScanner
+import com.fatisdahere.app.sensing.MotionTracker
+import com.fatisdahere.app.sensing.rekam
 import com.fatisdahere.app.sensing.hasLocationPermission
 import com.fatisdahere.app.sensing.wifiEnvironmentProblem
 import com.fatisdahere.app.ui.components.*
@@ -53,7 +56,8 @@ import kotlin.math.roundToInt
  *
  * - Pilih ruangan target, berdiri di dalam (atau sengaja di luar), lalu Scan & Uji.
  * - Batas rssiMin / distanceMax bisa diubah langsung di HP ini (KalibrasiLokal). Hanya berlaku
- *   di layar ini; absen mahasiswa tetap memakai PositioningParams.default().
+ *   di layar ini. Kalau sudah pas, "Simpan untuk Semua" menulisnya ke Firestore config/positioning,
+ *   yang dipakai absen mahasiswa di semua HP.
  * - Setiap tes disimpan ke Firestore (knnTests) beserta scan mentahnya, jadi rekap akurasi
  *   bisa dihitung ulang dengan batas apa pun tanpa scan ulang.
  */
@@ -64,15 +68,18 @@ private const val JENDELA_THROTTLE_MS = 120_000L
 private val PILIHAN_JUMLAH_SCAN = listOf(2, 3, 4)
 private const val RIWAYAT_TAMPIL = 30
 
-/** Satu tes beserta evaluasi KNN tiap scan. Evaluasi dihitung sekali; batas diterapkan belakangan. */
-private class TesDievaluasi(val test: KnnTest, val evals: List<ScanEvaluation>) {
+/**
+ * Satu tes beserta evaluasi KNN tiap scan. Evaluasi dihitung sekali; batas diterapkan belakangan.
+ * gerakan = hasil PDR selama scan (null untuk tes lama dari Firestore).
+ */
+private class TesDievaluasi(val test: KnnTest, val evals: List<ScanEvaluation>, val gerakan: MotionSummary? = null) {
     val jarak: List<Double> = evals.map { it.verdict.knnDistance }.filter { !it.isNaN() }
 }
 
 /** Lolos/tidaknya satu scan dengan batas tertentu (aturan sama dengan KnnPositioningEngine). */
 private fun lolos(e: ScanEvaluation, rssiMin: Int, distanceMax: Double): Boolean {
     val terkuat = e.strongest ?: return false
-    return e.apDominant && terkuat.rssi >= rssiMin && e.roomMajority && e.verdict.knnDistance <= distanceMax
+    return e.fresh && e.enoughBssids && e.apDominant && terkuat.rssi >= rssiMin && e.roomMajority && e.verdict.knnDistance <= distanceMax
 }
 
 private fun diterima(t: TesDievaluasi, rssiMin: Int, distanceMax: Double, minValid: Int) =
@@ -122,7 +129,7 @@ private fun hitungRekap(tes: List<TesDievaluasi>, rssiMin: Int, distanceMax: Dou
     )
 }
 
-private fun RawScan.keWifiScan() = WifiScan(readings.map { (b, r) -> WifiReading(b, r) }, timeMs)
+private fun RawScan.keWifiScan() = WifiScan(readings.map { (b, r) -> WifiReading(b, r) }, timeMs, fresh)
 
 private fun fmt(v: Double) = String.format(Locale.US, "%.1f", v)
 
@@ -143,7 +150,11 @@ fun TesKnnScreen(
     defaultParams: PositioningParams,
     kalibrasi: KalibrasiLokal,
     scanner: AndroidWifiScanner,
+    motionTracker: MotionTracker,
     repository: KalibrasiRepository,
+    sumberParameter: String,
+    muatParameter: suspend () -> Unit,
+    simpanUntukSemua: suspend (roomId: String, rssiMin: Int, distanceMax: Double) -> Unit,
     onBack: () -> Unit,
     onProfileClick: () -> Unit
 ) {
@@ -151,6 +162,17 @@ fun TesKnnScreen(
     val scope = rememberCoroutineScope()
     val engine = remember(fingerprint, defaultParams) { KnnPositioningEngine(fingerprint, defaultParams) }
     val ruangan = remember(fingerprint, defaultParams) { fingerprint.rooms.filter { it.roomId in defaultParams.rooms } }
+
+    // Ambil batas terbaru dari Firestore saat halaman dibuka (defaultParams ikut berubah)
+    LaunchedEffect(Unit) {
+        try {
+            muatParameter()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // tetap pakai yang ada
+        }
+    }
 
     // Layar tetap menyala selama di halaman tes
     val view = LocalView.current
@@ -161,7 +183,7 @@ fun TesKnnScreen(
 
     var roomId by rememberSaveable { mutableStateOf(ruangan.firstOrNull()?.roomId) }
     var versiBatas by remember { mutableStateOf(0) } // naik setiap batas diubah
-    val params = remember(versiBatas) { kalibrasi.params(defaultParams) }
+    val params = remember(versiBatas, defaultParams) { kalibrasi.params(defaultParams) }
     val batas = roomId?.let { params.rooms[it] }
     val batasDefault = roomId?.let { defaultParams.rooms[it] }
 
@@ -177,6 +199,9 @@ fun TesKnnScreen(
     var memuatRiwayat by remember { mutableStateOf(false) }
     var galatRiwayat by remember { mutableStateOf<String?>(null) }
     var hapusTarget by remember { mutableStateOf<TesDievaluasi?>(null) }
+    var konfirmasiSimpanSemua by remember { mutableStateOf(false) }
+    var menyimpanSemua by remember { mutableStateOf(false) }
+    var pesanSimpanSemua by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
     // Waktu scan terakhir untuk perkiraan throttling Android
     val waktuScan = remember { mutableStateListOf<Long>() }
@@ -234,9 +259,11 @@ fun TesKnnScreen(
             memindai = true
             progres = 0
             try {
-                val scans = scanner.scan(jumlahScan) {
-                    progres = it
-                    waktuScan += System.currentTimeMillis()
+                val (scans, gerakan) = motionTracker.rekam {
+                    scanner.scan(jumlahScan) {
+                        progres = it
+                        waktuScan += System.currentTimeMillis()
+                    }
                 }
                 val basi = scanner.staleScanCount
                 val evals = withContext(Dispatchers.Default) { scans.map { engine.evaluateScan(it, id) } }
@@ -244,7 +271,9 @@ fun TesKnnScreen(
                 val diterimaTes = lolosCount >= params.minValidScans
                 val alasan = if (diterimaTes) null else evals.mapNotNull { e ->
                     when {
+                        !e.fresh -> "STALE_SCAN"
                         e.strongest == null -> "NO_SIGNAL"
+                        !e.enoughBssids -> "FEW_BSSID"
                         !e.apDominant -> "ROOM_AP_NOT_DOMINANT"
                         e.strongest!!.rssi < b.rssiMin -> "RSSI_TOO_WEAK"
                         !e.roomMajority -> "WRONG_ROOM"
@@ -258,7 +287,7 @@ fun TesKnnScreen(
                     roomId = id,
                     position = posisi,
                     note = catatan.trim(),
-                    scans = scans.map { s -> RawScan(s.timeMs, s.readings.associate { it.bssid to it.rssi }) },
+                    scans = scans.map { s -> RawScan(s.timeMs, s.readings.associate { it.bssid to it.rssi }, s.fresh) },
                     accepted = diterimaTes,
                     reason = alasan,
                     validScans = lolosCount,
@@ -271,14 +300,14 @@ fun TesKnnScreen(
                     deviceModel = Build.MODEL,
                     testerId = userId,
                 )
-                val baru = TesDievaluasi(test, evals)
+                val baru = TesDievaluasi(test, evals, gerakan)
                 daftarTes.add(0, baru)
 
                 // Simpan ke Firestore; kalau gagal, hasil tetap tampil di layar
                 pesanSimpan = try {
                     val docId = repository.saveTest(test)
                     val idx = daftarTes.indexOf(baru)
-                    if (idx >= 0) daftarTes[idx] = TesDievaluasi(test.copy(id = docId), evals)
+                    if (idx >= 0) daftarTes[idx] = TesDievaluasi(test.copy(id = docId), evals, gerakan)
                     "Tersimpan ke Firestore (knnTests)." to false
                 } catch (e: CancellationException) {
                     throw e
@@ -336,10 +365,13 @@ fun TesKnnScreen(
             if (roomId != null && batas != null && batasDefault != null) {
                 SectionCard("Batas (hanya di HP ini)") {
                     HelperText(
-                        "Berlaku untuk layar ini saja. Absen mahasiswa tetap memakai batas di kode " +
-                            "(default: rssiMin ${batasDefault.rssiMin}, distanceMax ${fmt(batasDefault.distanceMax)})."
+                        "Perubahan di sini hanya berlaku di layar ini. Absen mahasiswa memakai batas aktif " +
+                            "(rssiMin ${batasDefault.rssiMin}, distanceMax ${fmt(batasDefault.distanceMax)}; sumber: $sumberParameter)."
                     )
-                    HelperText("AP utama: ${batas.mainApPrefix} · minimal ${params.minValidScans} scan lolos · k = ${params.k}")
+                    HelperText(
+                        "AP utama: ${batas.mainApPrefix} · minimal ${params.minValidScans} scan lolos · k = ${params.k} · " +
+                            "minimal ${params.minKnownBssids} BSSID dikenal · gerak maks ${fmt(params.maxDisplacementM)} m"
+                    )
                     Penyetel(
                         label = "rssiMin (dBm)",
                         nilai = "${batas.rssiMin}",
@@ -364,15 +396,26 @@ fun TesKnnScreen(
                             "+5" to { ubahBatas(batas.rssiMin, batas.distanceMax + 5) },
                         )
                     )
+                    val beda = batas.rssiMin != batasDefault.rssiMin || batas.distanceMax != batasDefault.distanceMax
+                    if (beda) {
+                        PrimaryButton(
+                            if (menyimpanSemua) "Menyimpan..." else "Simpan untuk Semua (Firestore)",
+                            onClick = { konfirmasiSimpanSemua = true },
+                            enabled = !memindai && !menyimpanSemua
+                        )
+                    }
                     if (kalibrasi.isUbah(roomId!!)) {
                         SecondaryButton(
-                            "Kembalikan ke Default",
+                            "Kembalikan ke Batas Aktif",
                             onClick = {
                                 kalibrasi.reset(roomId!!)
                                 versiBatas++
                             },
-                            enabled = !memindai
+                            enabled = !memindai && !menyimpanSemua
                         )
+                    }
+                    pesanSimpanSemua?.let { (teks, error) ->
+                        if (error) ErrorText(teks) else HelperText(teks, color = StatusSuccess)
                     }
                 }
 
@@ -505,6 +548,37 @@ fun TesKnnScreen(
         }
     }
 
+    val idSimpan = roomId
+    val batasSimpan = idSimpan?.let { params.rooms[it] }
+    if (konfirmasiSimpanSemua && idSimpan != null && batasSimpan != null) {
+        ConfirmDialog(
+            title = "Simpan untuk semua HP?",
+            text = "Batas ${fingerprint.roomName(idSimpan)} (rssiMin ${batasSimpan.rssiMin}, distanceMax ${fmt(batasSimpan.distanceMax)}) " +
+                "disimpan ke Firestore config/positioning dan langsung dipakai absen mahasiswa berikutnya.",
+            confirmText = "Simpan",
+            danger = false,
+            onConfirm = {
+                konfirmasiSimpanSemua = false
+                scope.launch {
+                    menyimpanSemua = true
+                    pesanSimpanSemua = try {
+                        simpanUntukSemua(idSimpan, batasSimpan.rssiMin, batasSimpan.distanceMax)
+                        kalibrasi.reset(idSimpan) // batas lokal sudah sama dengan batas aktif
+                        versiBatas++
+                        "Tersimpan. Absen mahasiswa sekarang memakai batas ini." to false
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        "Gagal menyimpan: ${pesanGalat(e)}" to true
+                    } finally {
+                        menyimpanSemua = false
+                    }
+                }
+            },
+            onDismiss = { konfirmasiSimpanSemua = false }
+        )
+    }
+
     hapusTarget?.let { t ->
         ConfirmDialog(
             title = "Hapus tes ini?",
@@ -531,8 +605,9 @@ fun TesKnnScreen(
 
 /** Ringkasan satu scan untuk disimpan di Firestore (mudah dibaca di Console). */
 private fun ringkasScan(e: ScanEvaluation, rssiMin: Int, distanceMax: Double): String {
-    val terkuat = e.strongest ?: return "GAGAL · tidak ada AP terbaca"
-    val status = if (lolos(e, rssiMin, distanceMax)) "LOLOS" else "GAGAL"
+    val basi = if (e.fresh) "" else " (BASI)"
+    val terkuat = e.strongest ?: return "GAGAL$basi · tidak ada AP terbaca"
+    val status = (if (lolos(e, rssiMin, distanceMax)) "LOLOS" else "GAGAL") + basi + " · ${e.knownBssids} BSSID dikenal"
     val tetangga = e.neighbors.joinToString("; ") { "${it.roomId}[${it.label}] ${fmt(it.distance)}" }
     return "$status · AP ${terkuat.bssid} ${terkuat.rssi} dBm · d=${fmt(e.verdict.knnDistance)} · $tetangga"
 }
@@ -564,6 +639,13 @@ private fun DetailTes(t: TesDievaluasi, fingerprint: FingerprintData, rssiMin: I
             color = readableColor(StatusWarning)
         )
     }
+    t.gerakan?.let { g ->
+        HelperText(
+            if (!g.sensorAvailable) "Gerakan: HP tidak punya akselerometer (PDR tidak aktif)."
+            else "Gerakan selama scan: ${g.steps} langkah (±${fmt(g.displacementM)} m)" +
+                if (g.steps > 0) " — saat absen asli, lebih dari batas gerak akan ditolak." else ""
+        )
+    }
     val tebakan = t.evals.mapNotNull { it.neighborRoomId }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
     HelperText("Tebakan KNN murni: ${tebakan?.let { fingerprint.roomName(it) } ?: "-"}")
     t.evals.forEachIndexed { i, e ->
@@ -591,6 +673,14 @@ private fun KartuScan(
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Scan $nomor: ${if (ok) "LOLOS" else "GAGAL"}", fontWeight = FontWeight.Bold, color = if (ok) StatusSuccess else StatusDanger)
+            if (!e.fresh) {
+                Text("Scan basi: Android tidak memberi data baru, scan ini tidak dinilai.", fontSize = 13.sp, color = readableColor(StatusWarning))
+            }
+            Text(
+                "BSSID dikenal: ${e.knownBssids} ${tanda(e.enoughBssids)}",
+                fontSize = 13.sp,
+                color = TextPrimary
+            )
             val terkuat = e.strongest
             if (terkuat == null) {
                 Text("Tidak ada AP \"${fingerprint.ssid}\" terbaca.", fontSize = 13.sp, color = TextPrimary)

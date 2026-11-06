@@ -60,6 +60,8 @@ fun AttendanceStatus.toPresence(): PresenceStatus? = when (this) {
 /** Alasan absen ditolak engine KNN, dalam bahasa yang dimengerti mahasiswa. */
 fun RejectReason.pesan(namaRuang: String, ssid: String): String = when (this) {
     RejectReason.NO_SIGNAL -> "Wi-Fi $ssid tidak terdeteksi. Pastikan Wi-Fi dan lokasi aktif."
+    RejectReason.STALE_SCAN -> "Android membatasi scan Wi-Fi (maks 4 kali per 2 menit). Tunggu sekitar 2 menit, lalu coba lagi."
+    RejectReason.FEW_BSSID -> "Sinyal Wi-Fi $ssid yang terbaca terlalu sedikit. Pastikan kamu di dalam ruangan, lalu coba lagi."
     RejectReason.ROOM_AP_NOT_DOMINANT -> "Kamu tidak terdeteksi di ruangan $namaRuang."
     RejectReason.RSSI_TOO_WEAK -> "Sinyal ruangan terlalu lemah. Masuk lebih ke dalam ruangan."
     RejectReason.WRONG_ROOM -> "Kamu terdeteksi di ruangan lain."

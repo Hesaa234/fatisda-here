@@ -150,7 +150,8 @@ enum class TestPosition(val value: String, val label: String) {
 }
 
 /** Satu scan Wi-Fi mentah yang disimpan untuk kalibrasi: bssid -> RSSI (dBm). */
-data class RawScan(val timeMs: Long, val readings: Map<String, Int>)
+/** fresh = false kalau scan basi (dibatasi Android). Data lama tanpa field ini dianggap fresh. */
+data class RawScan(val timeMs: Long, val readings: Map<String, Int>, val fresh: Boolean = true)
 
 /**
  * Dokumen knnTests/{autoId}: satu kali uji KNN oleh admin di lapangan (menu Tes KNN).

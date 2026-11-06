@@ -15,7 +15,9 @@ import com.fatisdahere.app.data.PresenceStatus
 import com.fatisdahere.app.data.Proof
 import com.fatisdahere.app.data.Room
 import com.fatisdahere.app.di.AppContainer
-import com.fatisdahere.app.positioning.MotionSummary
+import com.fatisdahere.app.positioning.KnnPositioningEngine
+import com.fatisdahere.app.positioning.RejectReason
+import com.fatisdahere.app.sensing.rekam
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.Job
@@ -193,7 +195,9 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 }
 
                 if (status == AttendanceStatus.Hadir) {
-                    if (sesi.roomId !in container.positioningParams.rooms) {
+                    // Batas KNN terbaru dari Firestore (kalau gagal, pakai yang terakhir / default di kode)
+                    val params = container.muatParameterKnn()
+                    if (sesi.roomId !in params.rooms) {
                         return@launch tampilkanHasil(
                             HasilAbsen(status, ResultState.Rejected, "Ruangan ${sesi.room} belum punya data fingerprint Wi-Fi. Hubungi dosen.")
                         )
@@ -201,9 +205,11 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
                     val scanner = container.wifiScanner
                     proses = ProsesAbsen.Memindai(0, SCAN_PER_ABSEN)
-                    val scans = scanner.scan(SCAN_PER_ABSEN) { proses = ProsesAbsen.Memindai(it, SCAN_PER_ABSEN) }
-                    // PDR belum dipasang: perpindahan dianggap 0 m.
-                    val decision = container.positioningEngine.decide(scans, MotionSummary(0, 0.0), sesi.roomId)
+                    // PDR: langkah dihitung selama scan; kalau pindah lebih dari batas, absen ditolak (MOVING)
+                    val (scans, gerakan) = container.motionTracker.rekam {
+                        scanner.scan(SCAN_PER_ABSEN) { proses = ProsesAbsen.Memindai(it, SCAN_PER_ABSEN) }
+                    }
+                    val decision = KnnPositioningEngine(container.fingerprint, params).decide(scans, gerakan, sesi.roomId)
 
                     proses = ProsesAbsen.Memproses
                     // Log percobaan tidak boleh menggagalkan absen
@@ -228,7 +234,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                     if (!decision.accepted) {
                         val alasan = decision.reason?.pesan(sesi.room, container.fingerprint.ssid)
                             ?: "Posisimu belum terkonfirmasi di dalam ruangan. Coba lagi."
-                        val catatanThrottle = if (scanner.staleScanCount > 0) {
+                        val catatanThrottle = if (scanner.staleScanCount > 0 && decision.reason != RejectReason.STALE_SCAN) {
                             "\n\nAndroid membatasi scan Wi-Fi (maks 4 kali per 2 menit). Tunggu sebentar sebelum mencoba lagi."
                         } else ""
                         return@launch tampilkanHasil(HasilAbsen(status, ResultState.Rejected, alasan + catatanThrottle))
