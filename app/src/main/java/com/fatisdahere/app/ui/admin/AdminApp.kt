@@ -238,7 +238,13 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             defaultParams = container.positioningParams,
             kalibrasi = container.kalibrasiLokal,
             scanner = container.wifiScanner,
+            motionTracker = container.motionTracker,
             repository = container.kalibrasiRepository,
+            sumberParameter = container.sumberParameter,
+            muatParameter = { container.muatParameterKnn() },
+            simpanUntukSemua = { roomId, rssiMin, distanceMax ->
+                container.simpanParameterRuangan(roomId, rssiMin, distanceMax)
+            },
             onBack = keBeranda,
             onProfileClick = keProfil
         )

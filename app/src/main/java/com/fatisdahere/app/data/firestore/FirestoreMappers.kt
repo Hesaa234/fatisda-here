@@ -168,7 +168,7 @@ internal fun KnnTest.toMap(): Map<String, Any> = buildMap {
     put("roomId", roomId)
     put("position", position.value)
     put("note", note)
-    put("scans", scans.map { mapOf("time" to ts(it.timeMs), "readings" to it.readings) })
+    put("scans", scans.map { mapOf("time" to ts(it.timeMs), "readings" to it.readings, "fresh" to it.fresh) })
     put("accepted", accepted)
     reason?.let { put("reason", it) }
     put("validScans", validScans)
@@ -193,7 +193,7 @@ internal fun DocumentSnapshot.toKnnTest(): KnnTest? {
             val rssi = (v as? Number)?.toInt() ?: return@mapNotNull null
             bssid to rssi
         }.toMap()
-        RawScan(time, readings)
+        RawScan(time, readings, m["fresh"] as? Boolean ?: true)
     }
     return KnnTest(
         id = id,
