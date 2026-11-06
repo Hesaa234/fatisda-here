@@ -1,3 +1,4 @@
+
 package com.fatisdahere.app.ui.dosen
 
 import androidx.compose.foundation.layout.*
@@ -23,7 +24,7 @@ fun DetailMatkul(
     username: String,
     matkul: MataKuliah,
     riwayat: List<Pertemuan>,
-    sesiBerlangsung: Boolean,
+    statusSesi: String?,
     onBukaSesi: () -> Unit,
     onKelolaPeserta: () -> Unit,
     onEditMatkul: () -> Unit,
@@ -34,37 +35,81 @@ fun DetailMatkul(
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = {
+            FatisdaTopBar(username, onProfileClick, onBack)
+        },
         containerColor = PageBackground
     ) { padding ->
+
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
             item {
                 SectionCard {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(matkul.judul, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            matkul.judul,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = UnsNavy
+                        )
+
                         Spacer(Modifier.height(4.dp))
+
                         InfoRow("Ruang", matkul.ruang)
-                        InfoRow("Peserta", "${matkul.jumlahPeserta} mahasiswa")
+                        InfoRow(
+                            "Peserta",
+                            "${matkul.jumlahPeserta} mahasiswa"
+                        )
                     }
+
                     PrimaryButton(
-                        if (sesiBerlangsung) "Sesi Sedang Berlangsung" else "Buka Sesi Absen",
+                        statusSesi ?: "Buka Sesi Absen",
                         onBukaSesi,
-                        enabled = !sesiBerlangsung
+                        enabled = statusSesi == null
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SecondaryButton("Kelola Peserta", onKelolaPeserta, Modifier.weight(1f))
-                        SecondaryButton("Edit Matkul", onEditMatkul, Modifier.weight(1f))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SecondaryButton(
+                            "Kelola Peserta",
+                            onKelolaPeserta,
+                            Modifier.weight(1f)
+                        )
+
+                        SecondaryButton(
+                            "Edit Matkul",
+                            onEditMatkul,
+                            Modifier.weight(1f)
+                        )
                     }
-                    SecondaryButton("Rekap Kehadiran", onRekap)
+
+                    SecondaryButton(
+                        "Rekap Kehadiran",
+                        onRekap
+                    )
                 }
             }
-            item { SectionTitle("Riwayat Pertemuan") }
-            if (riwayat.isEmpty()) item { HelperText("Belum ada pertemuan.") }
-            items(riwayat) { KartuPertemuan(it) }
+
+            item {
+                SectionTitle("Riwayat Pertemuan")
+            }
+
+            if (riwayat.isEmpty()) {
+                item {
+                    HelperText("Belum ada pertemuan.")
+                }
+            }
+
+            items(riwayat) {
+                KartuPertemuan(it)
+            }
         }
     }
 }
@@ -72,21 +117,39 @@ fun DetailMatkul(
 @Composable
 private fun KartuPertemuan(p: Pertemuan) {
     ItemCard {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             ItemTitle("Pertemuan ${p.nomor}")
+
             Text(
                 text = buildAnnotatedString {
                     append("Hadir: ")
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("${p.hadir}") }
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("${p.hadir}")
+                    }
                     append(" dari ${p.total}")
                 },
                 fontSize = 13.sp,
                 color = TextPrimary
             )
         }
+
         Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(p.tanggal, fontSize = 13.sp, color = UnsBlue, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                p.tanggal,
+                fontSize = 13.sp,
+                color = UnsBlue,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.End
+            )
+
             ItemSubtitle(p.waktu)
         }
     }
@@ -98,15 +161,24 @@ private fun DetailMatkulPreview() {
     FatisdaTheme {
         DetailMatkul(
             username = "Dosen",
-            matkul = MataKuliah("WMC-A", "Wireless & Mobile Computing", "LAB 2 UPT", 25),
+            matkul = MataKuliah(
+                "WMC-A",
+                "Wireless & Mobile Computing",
+                "LAB 2 UPT",
+                25
+            ),
             riwayat = listOf(
                 Pertemuan(3, 23, 25, "16 Okt 2026", "13:00 - 15:00"),
                 Pertemuan(2, 22, 25, "9 Okt 2026", "13:00 - 15:00"),
                 Pertemuan(1, 25, 25, "2 Okt 2026", "13:00 - 15:00")
             ),
-            sesiBerlangsung = false,
-            onBukaSesi = {}, onKelolaPeserta = {}, onEditMatkul = {}, onRekap = {},
-            onBack = {}, onProfileClick = {}
+            statusSesi = null,
+            onBukaSesi = {},
+            onKelolaPeserta = {},
+            onEditMatkul = {},
+            onRekap = {},
+            onBack = {},
+            onProfileClick = {}
         )
     }
 }

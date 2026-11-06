@@ -224,8 +224,8 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 matkul = MataKuliah(course.code, course.name, d.namaRuang(course.roomId), course.studentIds.size, course.id),
                 peserta = course.studentIds.mapNotNull { d.usersById[it] }.map { Peserta(it.name, it.nim ?: "-", it.uid) },
                 daftarMahasiswa = semuaMahasiswa.map { Peserta(it.name, it.nim ?: "-", it.uid) },
-                onTambah = { p -> ubah { container.courseRepository.setStudents(course.id, course.studentIds + p.uid) } },
-                onHapus = { p -> ubah { container.courseRepository.setStudents(course.id, course.studentIds - p.uid) } },
+                onTambah = { p -> ubah { container.courseRepository.addStudent(course.id, p.uid) } },
+                onHapus = { p -> ubah { container.courseRepository.removeStudent(course.id, p.uid) } },
                 onBack = { layar = LayarAdmin.EDIT_MATKUL },
                 onProfileClick = keProfil
             )

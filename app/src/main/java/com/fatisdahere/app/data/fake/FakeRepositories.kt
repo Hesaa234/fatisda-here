@@ -131,6 +131,26 @@ class FakeCourseRepository(private val db: FakeDatabase) : CourseRepository {
         val idx = db.courses.indexOfFirst { it.id == courseId }
         if (idx >= 0) db.courses[idx] = db.courses[idx].copy(studentIds = studentIds.distinct())
     }
+
+    override suspend fun addStudent(courseId: String, studentId: String) {
+        simulasiJaringan()
+        val idx = db.courses.indexOfFirst { it.id == courseId }
+        if (idx >= 0) {
+            val list = db.courses[idx].studentIds.toMutableList()
+            if (!list.contains(studentId)) list.add(studentId)
+            db.courses[idx] = db.courses[idx].copy(studentIds = list)
+        }
+    }
+
+    override suspend fun removeStudent(courseId: String, studentId: String) {
+        simulasiJaringan()
+        val idx = db.courses.indexOfFirst { it.id == courseId }
+        if (idx >= 0) {
+            val list = db.courses[idx].studentIds.toMutableList()
+            list.remove(studentId)
+            db.courses[idx] = db.courses[idx].copy(studentIds = list)
+        }
+    }
 }
 
 class FakeSessionRepository(private val db: FakeDatabase) : SessionRepository {
