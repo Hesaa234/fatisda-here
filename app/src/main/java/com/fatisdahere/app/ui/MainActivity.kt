@@ -97,13 +97,11 @@ private fun FatisdaApp(container: AppContainer) {
                     isLoading = true
                     error = null
 
-                    // Normalisasi input: Hapus spasi di awal/akhir dan ubah email/username ke huruf kecil
+                    // Email: hapus spasi di awal/akhir dan jadikan huruf kecil.
+                    // Kata sandi TIDAK di-trim karena spasi bisa jadi bagian dari kata sandi.
                     val cleanEmail = email.trim().lowercase()
-                    val cleanPassword = password.trim()
 
-                    Log.d("FatisdaAuth", "Mencoba login dengan: '$cleanEmail'")
-
-                    container.authRepository.signIn(cleanEmail, cleanPassword)
+                    container.authRepository.signIn(cleanEmail, password)
                         .onSuccess { user = it }
                         .onFailure { err ->
                             Log.e("FatisdaAuth", "Login gagal: ${err.message}", err)
