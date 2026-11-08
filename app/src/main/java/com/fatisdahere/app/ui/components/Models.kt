@@ -2,6 +2,7 @@ package com.fatisdahere.app.ui.components
 
 import androidx.compose.ui.graphics.Color
 import com.fatisdahere.app.ui.theme.StatusDanger
+import com.fatisdahere.app.ui.theme.StatusGray
 import com.fatisdahere.app.ui.theme.StatusSuccess
 import com.fatisdahere.app.ui.theme.StatusWarning
 import com.fatisdahere.app.ui.theme.UnsNavy
@@ -9,7 +10,7 @@ import com.fatisdahere.app.ui.theme.UnsNavy
 /** Status kehadiran untuk tampilan. Dipakai halaman mahasiswa DAN dosen. */
 enum class AttendanceStatus(val label: String, val color: Color) {
     Hadir("Hadir", StatusSuccess),
-    Izin("Izin", StatusWarning),
+    Izin("Izin", StatusGray),
     Sakit("Sakit", StatusWarning),
     Alpa("Alpa", StatusDanger),
     BelumAbsen("Belum Absen", UnsNavy)

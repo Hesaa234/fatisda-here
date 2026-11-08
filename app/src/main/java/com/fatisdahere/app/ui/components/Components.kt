@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fatisdahere.app.ui.theme.*
@@ -45,7 +46,14 @@ fun FatisdaTopBar(
     onBack: (() -> Unit)? = null
 ) {
     TopAppBar(
-        title = { Text("FATISDA Here", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                "FATISDA Here",
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         navigationIcon = {
             if (onBack != null) IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
@@ -63,7 +71,13 @@ fun FatisdaTopBar(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Icon(Icons.Filled.AccountCircle, null, Modifier.size(28.dp))
-                    Text(userName, fontSize = 14.sp)
+                    Text(
+                        userName,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 140.dp)
+                    )
                 }
             }
         },
@@ -148,8 +162,12 @@ fun ErrorText(text: String) {
     Text(text, fontSize = 13.sp, color = StatusDanger)
 }
 
-/** Warna teks untuk label berwarna (kuning dibuat lebih gelap supaya terbaca). */
-fun readableColor(color: Color): Color = if (color == StatusWarning) Color(0xFF8A6D00) else color
+/** Warna teks untuk label berwarna (kuning & abu-abu dibuat kontras supaya terbaca). */
+fun readableColor(color: Color): Color = when (color) {
+    StatusWarning -> Color(0xFF8A6D00)
+    StatusGray -> Color(0xFF495057)
+    else -> color
+}
 
 @Composable
 fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {

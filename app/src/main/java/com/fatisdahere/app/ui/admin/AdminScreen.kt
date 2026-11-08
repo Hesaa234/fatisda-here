@@ -174,7 +174,9 @@ fun FormAkun(
     errorMessage: String?,
     onSimpan: (NewAccount) -> Unit,
     onBack: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    nimTerpakai: List<String> = emptyList(),
+    nipTerpakai: List<String> = emptyList()
 ) {
     var nama by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -187,7 +189,20 @@ fun FormAkun(
         Role.DOSEN -> "NIP"
         Role.ADMIN -> null
     }
-    val bisaSimpan = !isLoading && nama.isNotBlank() && email.isNotBlank() && sandi.length >= 6
+
+    val nomorTrim = nomor.trim()
+    val nomorDipakai = when (role) {
+        Role.MAHASISWA -> nimTerpakai.any { it.equals(nomorTrim, ignoreCase = true) }
+        Role.DOSEN -> nipTerpakai.any { it.equals(nomorTrim, ignoreCase = true) }
+        Role.ADMIN -> false
+    }
+
+    val nomorValid = when (role) {
+        Role.MAHASISWA, Role.DOSEN -> nomorTrim.isNotBlank() && !nomorDipakai
+        Role.ADMIN -> true
+    }
+
+    val bisaSimpan = !isLoading && nama.isNotBlank() && email.isNotBlank() && sandi.length >= 6 && nomorValid
 
     Scaffold(
         topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
@@ -207,7 +222,13 @@ fun FormAkun(
                         value = labelRole(role),
                         placeholder = "Pilih peran",
                         options = PilihanRole.map(::labelRole),
-                        onSelect = { role = PilihanRole[it] }
+                        onSelect = {
+                            val peranBaru = PilihanRole[it]
+                            if (role != peranBaru) {
+                                role = peranBaru
+                                nomor = ""
+                            }
+                        }
                     )
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -217,7 +238,12 @@ fun FormAkun(
                 if (labelNomor != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FieldLabel(labelNomor)
-                        AppTextField(nomor, { nomor = it }, if (role == Role.MAHASISWA) "contoh: M0523001" else "contoh: 198001012005011001")
+                        AppTextField(
+                            nomor,
+                            { nomor = it },
+                            if (role == Role.MAHASISWA) "contoh: M0523001" else "contoh: 198001012005011001"
+                        )
+                        if (nomorDipakai) ErrorText("$labelNomor sudah terdaftar.")
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -252,12 +278,12 @@ fun FormAkun(
                     onClick = {
                         onSimpan(
                             NewAccount(
-                                name = nama,
-                                email = email,
+                                name = nama.trim(),
+                                email = email.trim(),
                                 password = sandi,
                                 role = role,
-                                nim = nomor.takeIf { role == Role.MAHASISWA },
-                                nip = nomor.takeIf { role == Role.DOSEN }
+                                nim = nomorTrim.takeIf { role == Role.MAHASISWA },
+                                nip = nomorTrim.takeIf { role == Role.DOSEN }
                             )
                         )
                     },
@@ -277,7 +303,8 @@ fun DaftarMatkulAdmin(
     onTambah: () -> Unit,
     onMatkulClick: (MatkulAdminUi) -> Unit,
     onBack: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    pesan: String? = null
 ) {
     Scaffold(
         topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
@@ -291,6 +318,7 @@ fun DaftarMatkulAdmin(
             item {
                 SectionCard("Mata Kuliah") {
                     PrimaryButton("+ Tambah Mata Kuliah", onTambah)
+                    if (pesan != null) HelperText(pesan, color = StatusSuccess)
                     HelperText("Pilih mata kuliah untuk mengubah dosen, ruangan, atau peserta.")
                 }
             }
@@ -328,6 +356,8 @@ fun FormMatkulAdmin(
     namaAwal: String = "",
     dosenAwal: String? = null,
     ruanganAwal: String? = null,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
     onKelolaPeserta: (() -> Unit)? = null
 ) {
     var kode by remember { mutableStateOf(kodeAwal) }
@@ -336,7 +366,7 @@ fun FormMatkulAdmin(
     var ruanganId by remember { mutableStateOf(ruanganAwal) }
 
     val kodeDipakai = kodeTerpakai.any { it.equals(kode.trim(), ignoreCase = true) }
-    val bisaSimpan = kode.isNotBlank() && nama.isNotBlank() && dosenId != null && ruanganId != null && !kodeDipakai
+    val bisaSimpan = !isLoading && kode.isNotBlank() && nama.isNotBlank() && dosenId != null && ruanganId != null && !kodeDipakai
 
     Scaffold(
         topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
@@ -380,8 +410,9 @@ fun FormMatkulAdmin(
                         emptyText = "Belum ada data ruangan"
                     )
                 }
+                if (errorMessage != null) ErrorText(errorMessage)
                 PrimaryButton(
-                    "Simpan",
+                    if (isLoading) "Menyimpan..." else "Simpan",
                     onClick = {
                         val d = dosenId
                         val r = ruanganId
