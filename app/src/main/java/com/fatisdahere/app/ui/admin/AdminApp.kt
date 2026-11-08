@@ -48,9 +48,17 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var data by remember { mutableStateOf<DataAdmin?>(null) }
     var galatMuat by remember { mutableStateOf<String?>(null) }
     var galatAksi by remember { mutableStateOf<String?>(null) }
+
+    // --- state form akun ---
     var simpanAkunLoading by remember { mutableStateOf(false) }
     var simpanAkunGalat by remember { mutableStateOf<String?>(null) }
     var pesanAkun by remember { mutableStateOf<String?>(null) }
+
+    // --- state form matkul ---
+    var simpanMatkulLoading by remember { mutableStateOf(false) }
+    var simpanMatkulGalat by remember { mutableStateOf<String?>(null) }
+    var pesanMatkul by remember { mutableStateOf<String?>(null) }
+
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(versi) {
@@ -107,6 +115,10 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     val daftarRuangan = d.rooms.map { it.id to it.name }
     val course = d.courses.firstOrNull { it.id == courseIdTerpilih }
 
+    // Daftar NIM & NIP yang sudah terpakai (untuk validasi duplikasi di FormAkun)
+    val nimTerpakai = d.users.mapNotNull { it.nim }
+    val nipTerpakai = d.users.mapNotNull { it.nip }
+
     when {
         layar == LayarAdmin.PROFIL -> Scaffold(
             topBar = { FatisdaTopBar(user.name, onBack = keBeranda) },
@@ -159,7 +171,9 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 }
             },
             onBack = { layar = LayarAdmin.AKUN },
-            onProfileClick = keProfil
+            onProfileClick = keProfil,
+            nimTerpakai = nimTerpakai,
+            nipTerpakai = nipTerpakai
         )
 
         layar == LayarAdmin.MATKUL -> DaftarMatkulAdmin(
@@ -167,13 +181,20 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             matkul = d.courses.map {
                 MatkulAdminUi(it.id, it.code, it.name, d.namaUser(it.lecturerId), d.namaRuang(it.roomId), it.studentIds.size)
             },
-            onTambah = { layar = LayarAdmin.TAMBAH_MATKUL },
+            onTambah = {
+                simpanMatkulGalat = null
+                pesanMatkul = null
+                layar = LayarAdmin.TAMBAH_MATKUL
+            },
             onMatkulClick = {
+                simpanMatkulGalat = null
+                pesanMatkul = null
                 courseIdTerpilih = it.id
                 layar = LayarAdmin.EDIT_MATKUL
             },
             onBack = keBeranda,
-            onProfileClick = keProfil
+            onProfileClick = keProfil,
+            pesan = pesanMatkul
         )
 
         layar == LayarAdmin.TAMBAH_MATKUL -> FormMatkulAdmin(
@@ -182,13 +203,26 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             daftarDosen = daftarDosen,
             daftarRuangan = daftarRuangan,
             kodeTerpakai = d.courses.map { it.code },
+            isLoading = simpanMatkulLoading,
+            errorMessage = simpanMatkulGalat,
             onSimpan = { kode, nama, dosenId, ruanganId ->
-                ubah {
-                    container.courseRepository.addCourse(
-                        Course(id = "", code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId, studentIds = emptyList())
-                    )
+                scope.launch {
+                    simpanMatkulLoading = true
+                    simpanMatkulGalat = null
+                    try {
+                        container.courseRepository.addCourse(
+                            Course(id = "", code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId, studentIds = emptyList())
+                        )
+                        pesanMatkul = "Mata kuliah ($kode) $nama berhasil ditambahkan."
+                        layar = LayarAdmin.MATKUL
+                        versi++
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        simpanMatkulGalat = pesanGalat(e)
+                    }
+                    simpanMatkulLoading = false
                 }
-                layar = LayarAdmin.MATKUL
             },
             onBack = { layar = LayarAdmin.MATKUL },
             onProfileClick = keProfil
@@ -204,13 +238,26 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             namaAwal = course.name,
             dosenAwal = course.lecturerId,
             ruanganAwal = course.roomId,
+            isLoading = simpanMatkulLoading,
+            errorMessage = simpanMatkulGalat,
             onSimpan = { kode, nama, dosenId, ruanganId ->
-                ubah {
-                    container.courseRepository.updateCourse(
-                        course.copy(code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId)
-                    )
+                scope.launch {
+                    simpanMatkulLoading = true
+                    simpanMatkulGalat = null
+                    try {
+                        container.courseRepository.updateCourse(
+                            course.copy(code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId)
+                        )
+                        pesanMatkul = "Mata kuliah ($kode) $nama berhasil diperbarui."
+                        layar = LayarAdmin.MATKUL
+                        versi++
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        simpanMatkulGalat = pesanGalat(e)
+                    }
+                    simpanMatkulLoading = false
                 }
-                layar = LayarAdmin.MATKUL
             },
             onKelolaPeserta = { layar = LayarAdmin.PESERTA },
             onBack = { layar = LayarAdmin.MATKUL },
@@ -269,7 +316,10 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 pesanAkun = null
                 layar = LayarAdmin.AKUN
             },
-            onMatkul = { layar = LayarAdmin.MATKUL },
+            onMatkul = {
+                pesanMatkul = null
+                layar = LayarAdmin.MATKUL
+            },
             onRuangan = { layar = LayarAdmin.RUANGAN },
             onProfileClick = keProfil,
             onTesKnn = { layar = LayarAdmin.TES_KNN }

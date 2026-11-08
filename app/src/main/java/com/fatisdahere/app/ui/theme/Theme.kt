@@ -15,6 +15,8 @@ val TextPrimary = Color(0xFF1E293B)
 val StatusSuccess = Color(0xFF28A745)
 val StatusWarning = Color(0xFFFFC107)
 val StatusDanger = Color(0xFFDC3545)
+val StatusGray = Color(0xFF6C757D)
+val StatusNeutral = StatusGray
 
 private val Scheme = lightColorScheme(
     primary = UnsBlue,
