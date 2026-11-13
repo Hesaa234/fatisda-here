@@ -24,8 +24,10 @@ fun TambahMatkul(
     judul: String = "Tambah Mata Kuliah",
     kodeAwal: String = "",
     namaAwal: String = "",
-    ruanganAwal: String? = null
+    ruanganAwal: String? = null,
+    onHapus: (() -> Unit)? = null // null = mode tambah (tombol hapus disembunyikan)
 ) {
+    var konfirmasiHapus by remember { mutableStateOf(false) }
     var kode by remember { mutableStateOf(kodeAwal) }
     var nama by remember { mutableStateOf(namaAwal) }
     var ruangan by remember { mutableStateOf(ruanganAwal) }
@@ -72,7 +74,23 @@ fun TambahMatkul(
                     enabled = bisaSimpan
                 )
             }
+            if (onHapus != null) {
+                DangerButton("Hapus Mata Kuliah", { konfirmasiHapus = true })
+            }
         }
+    }
+    if (konfirmasiHapus && onHapus != null) {
+        ConfirmDialog(
+            title = "Hapus mata kuliah ini?",
+            text = "Mata kuliah $namaAwal beserta SEMUA pertemuan, data kehadiran, dan foto bukti izin/sakit " +
+                "akan dihapus permanen dan tidak bisa dikembalikan.",
+            confirmText = "Hapus",
+            onConfirm = {
+                konfirmasiHapus = false
+                onHapus()
+            },
+            onDismiss = { konfirmasiHapus = false }
+        )
     }
 }
 

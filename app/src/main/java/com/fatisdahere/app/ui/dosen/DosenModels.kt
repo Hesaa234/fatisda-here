@@ -29,14 +29,29 @@ data class SesiAktif(
     val judul get() = "($kodeMatkul) - $namaMatkul"
 }
 
+/** terjadwal = sesi belum dimulai (dibuka dosen untuk jam nanti). */
 data class Pertemuan(
     val nomor: Int,
     val hadir: Int,
     val total: Int,
     val tanggal: String,
     val waktu: String,
-    val sessionId: String = ""
+    val sessionId: String = "",
+    val terjadwal: Boolean = false
 )
+
+/** Rekap satu mahasiswa untuk semua pertemuan yang sudah selesai (Rekap Kehadiran > Per Mahasiswa). */
+data class RekapMahasiswa(
+    val nama: String,
+    val nim: String,
+    val hadir: Int,
+    val izin: Int,
+    val sakit: Int,
+    val alpa: Int
+) {
+    val total get() = hadir + izin + sakit + alpa
+    val persenHadir get() = if (total == 0) 0 else Math.round(hadir * 100f / total)
+}
 
 data class Peserta(
     val nama: String,

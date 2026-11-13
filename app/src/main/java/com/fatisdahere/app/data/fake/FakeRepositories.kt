@@ -45,6 +45,14 @@ class FakeAuthRepository(private val db: FakeDatabase) : AuthRepository {
     }
 
     override suspend fun signOut() {}
+
+    /** Mode demo: tidak ada login yang diingat. */
+    override suspend fun currentUser(): AppUser? = null
+
+    override suspend fun sendPasswordReset(email: String): Result<Unit> {
+        simulasiJaringan()
+        return Result.success(Unit)
+    }
 }
 
 class FakeUserRepository(private val db: FakeDatabase) : UserRepository {
@@ -83,6 +91,12 @@ class FakeUserRepository(private val db: FakeDatabase) : UserRepository {
         )
         db.users += user
         return Result.success(user)
+    }
+
+    override suspend fun updateUser(user: AppUser) {
+        simulasiJaringan()
+        val idx = db.users.indexOfFirst { it.uid == user.uid }
+        if (idx >= 0) db.users[idx] = user
     }
 }
 
@@ -151,6 +165,15 @@ class FakeCourseRepository(private val db: FakeDatabase) : CourseRepository {
             db.courses[idx] = db.courses[idx].copy(studentIds = list)
         }
     }
+
+    override suspend fun deleteCourse(courseId: String) {
+        simulasiJaringan()
+        val sesi = db.sessions.filter { it.courseId == courseId }.map { it.id }.toSet()
+        db.courses.removeAll { it.id == courseId }
+        db.sessions.removeAll { it.id in sesi }
+        db.attendances.removeAll { it.sessionId in sesi }
+        db.proofs.removeAll { it.sessionId in sesi }
+    }
 }
 
 class FakeSessionRepository(private val db: FakeDatabase) : SessionRepository {
@@ -186,6 +209,16 @@ class FakeSessionRepository(private val db: FakeDatabase) : SessionRepository {
         val idx = db.sessions.indexOfFirst { it.id == sessionId }
         if (idx >= 0) db.sessions[idx] = db.sessions[idx].copy(closedAtMs = nowMs)
     }
+
+    override suspend fun deleteSession(sessionId: String) {
+        simulasiJaringan()
+        db.sessions.removeAll { it.id == sessionId }
+        db.attendances.removeAll { it.sessionId == sessionId }
+        db.proofs.removeAll { it.sessionId == sessionId }
+    }
+
+    /** Mode demo tidak punya realtime. */
+    override fun listenSessions(courseIds: List<String>, onChange: (List<AttendanceSession>) -> Unit): () -> Unit = {}
 }
 
 class FakeAttendanceRepository(private val db: FakeDatabase) : AttendanceRepository {

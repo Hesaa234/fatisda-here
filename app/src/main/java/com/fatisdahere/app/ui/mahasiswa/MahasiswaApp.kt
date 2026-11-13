@@ -1,10 +1,14 @@
 package com.fatisdahere.app.ui.mahasiswa
 
+import android.Manifest
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import com.fatisdahere.app.data.AppUser
 import com.fatisdahere.app.data.Attempt
 import com.fatisdahere.app.data.Attendance
@@ -52,7 +56,13 @@ private suspend fun muatDataMahasiswa(c: AppContainer, uid: String): DataMahasis
     return DataMahasiswa(courses, rooms, lecturers, sessions, mine)
 }
 
-private class HasilAbsen(val status: AttendanceStatus, val state: ResultState, val message: String?)
+/** bisaCobaLagi = false kalau mencoba lagi pasti percuma (sudah absen, sesi berakhir). */
+private class HasilAbsen(
+    val status: AttendanceStatus,
+    val state: ResultState,
+    val message: String?,
+    val bisaCobaLagi: Boolean = true
+)
 
 /**
  * Alur mahasiswa:
@@ -91,6 +101,36 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     galatAksi?.let { ErrorDialog(it) { galatAksi = null } }
 
+    // ---------- Notifikasi & beranda realtime saat dosen membuka sesi ----------
+    val context = LocalContext.current
+    val izinNotifikasi = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (NotifikasiSesi.perluIzin(context)) izinNotifikasi.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    val courseIds = data?.courses?.map { it.id }.orEmpty()
+    DisposableEffect(courseIds) {
+        var dikenal: Set<String>? = null // sesi yang sudah ada saat mulai memantau (tidak dinotifikasi)
+        val berhenti = container.sessionRepository.listenSessions(courseIds) { daftar ->
+            val sebelumnya = dikenal
+            dikenal = daftar.map { it.id }.toSet()
+            if (sebelumnya == null) return@listenSessions
+            if (dikenal != sebelumnya) versi++ // ada sesi baru/terhapus: muat ulang beranda
+
+            val jam = System.currentTimeMillis()
+            daftar.filter { it.id !in sebelumnya && it.closedAtMs == null && it.endAtMs > jam }.forEach { s ->
+                val c = data?.courses?.firstOrNull { it.id == s.courseId }
+                val ruang = data?.namaRuang(s.roomId) ?: s.roomId
+                NotifikasiSesi.tampilkan(
+                    context,
+                    s.id.hashCode(),
+                    "Sesi absen dibuka: ${c?.code ?: "Mata kuliah"}",
+                    "${c?.name ?: ""} · $ruang · ${formatRentangJam(s.startAtMs, s.endAtMs)}. Buka aplikasi untuk absen."
+                )
+            }
+        }
+        onDispose { berhenti() }
+    }
+
     // Keluar dari halaman absen membatalkan scan yang sedang berjalan
     val keHome = {
         jobAbsen?.cancel()
@@ -122,7 +162,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         return SessionUi(
             code = c.code,
             name = c.name,
-            time = terakhir?.let { formatHariJam(it.startAtMs) } ?: "-",
+            time = terakhir?.let { "Terakhir: ${formatHariJam(it.startAtMs)}" } ?: "Belum ada pertemuan",
             room = d.namaRuang(c.roomId),
             lecturer = d.namaDosen(c.lecturerId),
             courseId = c.id,
@@ -148,7 +188,8 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             hasil = HasilAbsen(
                 d.myAttendance.getValue(sessionId).status.toUi(),
                 ResultState.Rejected,
-                "Kamu sudah absen di sesi ini."
+                "Kamu sudah absen di sesi ini.",
+                bisaCobaLagi = false
             )
             layar = LayarMahasiswa.RESULT
         } else {
@@ -174,7 +215,9 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 // Cek ulang: sesi bisa saja sudah lewat atau ditutup dosen sejak halaman dibuka
                 suspend fun sesiMasihBuka() = container.sessionRepository.sessionsOfCourse(sesi.courseId)
                     .firstOrNull { it.id == sessionId }?.isOpen(System.currentTimeMillis()) == true
-                val sesiBerakhir = HasilAbsen(status, ResultState.Rejected, "Sesi absen sudah berakhir atau ditutup dosen.")
+                val sesiBerakhir = HasilAbsen(
+                    status, ResultState.Rejected, "Sesi absen sudah berakhir atau ditutup dosen.", bisaCobaLagi = false
+                )
 
                 proses = ProsesAbsen.Memproses
                 if (!sesiMasihBuka()) return@launch tampilkanHasil(sesiBerakhir)
@@ -283,6 +326,7 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         layar == LayarMahasiswa.PROFILE -> StudentProfileScreen(
             name = user.name,
             nim = user.nim ?: "-",
+            email = user.email,
             onLogoutClick = onLogout,
             onBack = keHome
         )
@@ -313,7 +357,9 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 history = riwayat,
                 onAbsenClick = { mulaiAbsen(uiHeader) },
                 onBack = keHome,
-                sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id)
+                sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id),
+                ringkasan = RingkasanKehadiran.dari(riwayat),
+                onProfileClick = keProfil
             )
         }
 
@@ -336,7 +382,10 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 state = h.state,
                 message = h.message,
                 onRetryClick = { mulaiAbsen(sesi) },
-                onDoneClick = keHome
+                onDoneClick = keHome,
+                bisaCobaLagi = h.bisaCobaLagi,
+                onBack = keHome,
+                onProfileClick = keProfil
             )
         }
 

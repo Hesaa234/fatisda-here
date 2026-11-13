@@ -7,6 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -101,7 +103,7 @@ private fun MenuCard(judul: String, keterangan: String, onClick: () -> Unit) {
             Text(judul, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
             ItemSubtitle(keterangan)
         }
-        Text("›", fontSize = 28.sp, color = UnsBlue)
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = UnsBlue)
     }
 }
 
@@ -116,7 +118,8 @@ fun DaftarAkun(
     onTambah: () -> Unit,
     onBack: () -> Unit,
     onProfileClick: () -> Unit,
-    pesan: String? = null
+    pesan: String? = null,
+    onAkunClick: (AkunUi) -> Unit = {}
 ) {
     var filter by remember { mutableStateOf<Role?>(null) }
     var cari by remember { mutableStateOf("") }
@@ -146,12 +149,12 @@ fun DaftarAkun(
                         options = FilterRole.map { it?.let(::labelRole) ?: "Semua" },
                         onSelect = { filter = FilterRole[it] }
                     )
-                    HelperText("${tampil.size} akun")
+                    HelperText("${tampil.size} akun · tekan akun untuk mengubah data atau reset kata sandi")
                 }
             }
             if (tampil.isEmpty()) item { HelperText("Tidak ada akun yang cocok.") }
             items(tampil) { a ->
-                ItemCard {
+                ItemCard(onClick = { onAkunClick(a) }) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ItemTitle(a.nama)
                         ItemSubtitle(a.email)
@@ -190,6 +193,8 @@ fun FormAkun(
         Role.ADMIN -> null
     }
 
+    val emailValid = POLA_EMAIL.matches(email.trim())
+
     val nomorTrim = nomor.trim()
     val nomorDipakai = when (role) {
         Role.MAHASISWA -> nimTerpakai.any { it.equals(nomorTrim, ignoreCase = true) }
@@ -202,7 +207,7 @@ fun FormAkun(
         Role.ADMIN -> true
     }
 
-    val bisaSimpan = !isLoading && nama.isNotBlank() && email.isNotBlank() && sandi.length >= 6 && nomorValid
+    val bisaSimpan = !isLoading && nama.isNotBlank() && emailValid && sandi.length >= 6 && nomorValid
 
     Scaffold(
         topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
@@ -257,6 +262,7 @@ fun FormAkun(
                         shape = RoundedCornerShape(12.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                     )
+                    if (email.isNotBlank() && !emailValid) ErrorText("Format email tidak valid, contoh: nama@student.uns.ac.id")
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Kata Sandi Awal")
@@ -291,6 +297,105 @@ fun FormAkun(
                 )
             }
         }
+    }
+}
+
+/** Format email sederhana: ada teks@teks.domain tanpa spasi. */
+private val POLA_EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+
+/**
+ * Edit akun: nama dan NIM/NIP bisa diubah; email dan peran tidak (email dipakai untuk login di
+ * Firebase Authentication). Kata sandi tidak bisa dilihat/diubah admin, tapi admin bisa
+ * mengirim email reset kata sandi ke pemilik akun.
+ */
+@Composable
+fun EditAkun(
+    username: String,
+    akun: AkunUi,
+    nomorTerpakai: List<String>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    pesan: String?,
+    onSimpan: (nama: String, nomor: String?) -> Unit,
+    onKirimResetSandi: () -> Unit,
+    onBack: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    var nama by remember(akun.uid) { mutableStateOf(akun.nama) }
+    var nomor by remember(akun.uid) { mutableStateOf(akun.nomorInduk.orEmpty()) }
+    var konfirmasiReset by remember { mutableStateOf(false) }
+
+    val labelNomor = when (akun.role) {
+        Role.MAHASISWA -> "NIM"
+        Role.DOSEN -> "NIP"
+        Role.ADMIN -> null
+    }
+    val nomorTrim = nomor.trim()
+    val nomorDipakai = labelNomor != null &&
+        !nomorTrim.equals(akun.nomorInduk.orEmpty(), ignoreCase = true) &&
+        nomorTerpakai.any { it.equals(nomorTrim, ignoreCase = true) }
+    val nomorValid = labelNomor == null || (nomorTrim.isNotBlank() && !nomorDipakai)
+    val berubah = nama.trim() != akun.nama || (labelNomor != null && nomorTrim != akun.nomorInduk.orEmpty())
+    val bisaSimpan = !isLoading && nama.isNotBlank() && nomorValid && berubah
+
+    Scaffold(
+        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        containerColor = PageBackground
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            SectionCard("Edit Akun") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        FieldLabel("Email (untuk login)")
+                        Text(akun.email, fontSize = 15.sp, color = TextPrimary)
+                    }
+                    StatusPill(labelRole(akun.role), warnaRole(akun.role))
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FieldLabel("Nama Lengkap")
+                    AppTextField(nama, { nama = it }, "contoh: Andi Pratama")
+                }
+                if (labelNomor != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FieldLabel(labelNomor)
+                        AppTextField(nomor, { nomor = it }, if (akun.role == Role.MAHASISWA) "contoh: M0523001" else "contoh: 198001012005011001")
+                        if (nomorDipakai) ErrorText("$labelNomor sudah dipakai akun lain.")
+                        if (nomorTrim.isBlank()) ErrorText("$labelNomor wajib diisi.")
+                    }
+                }
+                if (errorMessage != null) ErrorText(errorMessage)
+                if (pesan != null) HelperText(pesan, color = StatusSuccess)
+                PrimaryButton(
+                    if (isLoading) "Menyimpan..." else "Simpan Perubahan",
+                    onClick = { onSimpan(nama.trim(), nomorTrim.takeIf { labelNomor != null }) },
+                    enabled = bisaSimpan
+                )
+            }
+            SectionCard("Kata Sandi") {
+                HelperText(
+                    "Admin tidak bisa melihat kata sandi. Kalau pemilik akun lupa, kirim email reset: " +
+                        "pemilik akun membuat kata sandi baru lewat tautan di email ${akun.email}."
+                )
+                SecondaryButton("Kirim Email Reset Kata Sandi", { konfirmasiReset = true }, enabled = !isLoading)
+            }
+        }
+    }
+
+    if (konfirmasiReset) {
+        ConfirmDialog(
+            title = "Kirim email reset?",
+            text = "Tautan untuk membuat kata sandi baru dikirim ke ${akun.email}.",
+            confirmText = "Kirim",
+            danger = false,
+            onConfirm = {
+                konfirmasiReset = false
+                onKirimResetSandi()
+            },
+            onDismiss = { konfirmasiReset = false }
+        )
     }
 }
 
@@ -358,8 +463,10 @@ fun FormMatkulAdmin(
     ruanganAwal: String? = null,
     isLoading: Boolean = false,
     errorMessage: String? = null,
-    onKelolaPeserta: (() -> Unit)? = null
+    onKelolaPeserta: (() -> Unit)? = null,
+    onHapus: (() -> Unit)? = null // null = mode tambah (tombol hapus disembunyikan)
 ) {
+    var konfirmasiHapus by remember { mutableStateOf(false) }
     var kode by remember { mutableStateOf(kodeAwal) }
     var nama by remember { mutableStateOf(namaAwal) }
     var dosenId by remember { mutableStateOf(dosenAwal) }
@@ -424,7 +531,23 @@ fun FormMatkulAdmin(
             if (onKelolaPeserta != null) {
                 SecondaryButton("Kelola Peserta", onKelolaPeserta)
             }
+            if (onHapus != null) {
+                DangerButton("Hapus Mata Kuliah", { konfirmasiHapus = true })
+            }
         }
+    }
+    if (konfirmasiHapus && onHapus != null) {
+        ConfirmDialog(
+            title = "Hapus mata kuliah ini?",
+            text = "Mata kuliah $namaAwal beserta SEMUA pertemuan, data kehadiran, dan foto bukti izin/sakit " +
+                "akan dihapus permanen dan tidak bisa dikembalikan.",
+            confirmText = "Hapus",
+            onConfirm = {
+                konfirmasiHapus = false
+                onHapus()
+            },
+            onDismiss = { konfirmasiHapus = false }
+        )
     }
 }
 

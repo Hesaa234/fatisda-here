@@ -17,6 +17,21 @@ import androidx.compose.ui.unit.sp
 import com.fatisdahere.app.ui.theme.*
 import com.fatisdahere.app.ui.components.*
 
+/** Ringkasan kehadiran dari pertemuan yang sudah selesai. */
+data class RingkasanKehadiran(val hadir: Int, val izin: Int, val sakit: Int, val alpa: Int) {
+    val total get() = hadir + izin + sakit + alpa
+    val persenHadir get() = if (total == 0) 0 else Math.round(hadir * 100f / total)
+
+    companion object {
+        fun dari(riwayat: List<AttendanceRecord>) = RingkasanKehadiran(
+            hadir = riwayat.count { it.status == AttendanceStatus.Hadir },
+            izin = riwayat.count { it.status == AttendanceStatus.Izin },
+            sakit = riwayat.count { it.status == AttendanceStatus.Sakit },
+            alpa = riwayat.count { it.status == AttendanceStatus.Alpa },
+        )
+    }
+}
+
 @Composable
 fun StudentCourseDetailScreen(
     userName: String,
@@ -27,11 +42,13 @@ fun StudentCourseDetailScreen(
     onAbsenClick: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    sudahAbsen: Boolean = false
+    sudahAbsen: Boolean = false,
+    ringkasan: RingkasanKehadiran? = null,
+    onProfileClick: () -> Unit = {}
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(userName, onBack = onBack) },
+        topBar = { FatisdaTopBar(userName, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
@@ -52,10 +69,37 @@ fun StudentCourseDetailScreen(
                     )
                 }
             }
+            if (ringkasan != null && ringkasan.total > 0) item { KartuRingkasan(ringkasan) }
             item {
                 Text("Riwayat Absensi", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
             }
+            if (history.isEmpty()) item {
+                SectionCard { HelperText("Belum ada pertemuan yang selesai untuk mata kuliah ini.") }
+            }
             items(history, key = { it.meeting }) { HistoryCard(it) }
+        }
+    }
+}
+
+@Composable
+private fun KartuRingkasan(r: RingkasanKehadiran) {
+    SectionCard("Ringkasan Kehadiran") {
+        Text(
+            "Hadir ${r.hadir} dari ${r.total} pertemuan (${r.persenHadir}%)",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = UnsNavy
+        )
+        LinearProgressIndicator(
+            progress = r.persenHadir / 100f,
+            modifier = Modifier.fillMaxWidth().height(8.dp),
+            color = StatusSuccess,
+            trackColor = StatusSuccess.copy(alpha = 0.15f)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatusPill("Izin ${r.izin}", AttendanceStatus.Izin.color)
+            StatusPill("Sakit ${r.sakit}", AttendanceStatus.Sakit.color)
+            StatusPill("Alpa ${r.alpa}", AttendanceStatus.Alpa.color)
         }
     }
 }
@@ -97,6 +141,9 @@ private fun StudentCourseDetailPreview() {
         AttendanceRecord(4, AttendanceStatus.Hadir, "Lab 3.2", "Sen, 22 Sep 08:00")
     )
     FatisdaTheme {
-        StudentCourseDetailScreen("Andi", sampleSession, AttendanceStatus.Hadir, true, history, {}, {})
+        StudentCourseDetailScreen(
+            "Andi", sampleSession, AttendanceStatus.Hadir, true, history, {}, {},
+            ringkasan = RingkasanKehadiran.dari(history)
+        )
     }
 }

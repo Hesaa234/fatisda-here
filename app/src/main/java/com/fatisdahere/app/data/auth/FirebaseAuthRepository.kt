@@ -50,4 +50,30 @@ class FirebaseAuthRepository(
     override suspend fun signOut() {
         auth.signOut()
     }
+
+    /**
+     * Firebase menyimpan sesi login di HP, jadi setelah aplikasi ditutup user masih login.
+     * Data users/{uid} dibaca ulang supaya nama/role selalu terbaru.
+     */
+    override suspend fun currentUser(): AppUser? {
+        val uid = auth.currentUser?.uid ?: return null
+        return try {
+            db.collection("users").document(uid).get().await().toAppUser()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // offline / gagal: tampilkan layar login biasa
+        }
+    }
+
+    override suspend fun sendPasswordReset(email: String): Result<Unit> = try {
+        auth.sendPasswordResetEmail(email.trim()).await()
+        Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: FirebaseNetworkException) {
+        Result.failure(IllegalStateException("Tidak ada koneksi internet."))
+    } catch (e: Exception) {
+        Result.failure(IllegalStateException(e.message ?: "Gagal mengirim email reset."))
+    }
 }

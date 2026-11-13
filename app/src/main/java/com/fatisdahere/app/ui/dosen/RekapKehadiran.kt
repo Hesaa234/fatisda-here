@@ -1,5 +1,7 @@
 package com.fatisdahere.app.ui.dosen
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,8 +27,13 @@ private val PilihanStatus = listOf(
 )
 
 /**
+ * Dua tampilan:
+ *  - Per Pertemuan: status tiap mahasiswa di satu pertemuan, bisa diubah dosen
+ *  - Per Mahasiswa: jumlah Hadir/Izin/Sakit/Alpa dan % kehadiran tiap mahasiswa (pertemuan yang sudah selesai)
+ *
  * @param riwayat pertemuan, terbaru di atas
  * @param catatanUntuk daftar status mahasiswa untuk satu pertemuan
+ * @param rekapMahasiswa rekap per mahasiswa untuk tab "Per Mahasiswa"
  */
 @Composable
 fun RekapKehadiran(
@@ -38,13 +45,38 @@ fun RekapKehadiran(
     onBack: () -> Unit,
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onLihatKeterangan: (pertemuan: Pertemuan, catatan: CatatanKehadiran) -> Unit = { _, _ -> }
+    onLihatKeterangan: (pertemuan: Pertemuan, catatan: CatatanKehadiran) -> Unit = { _, _ -> },
+    rekapMahasiswa: List<RekapMahasiswa> = emptyList(),
+    onHapusPertemuan: ((Pertemuan) -> Unit)? = null,
+    buatCsv: (() -> String)? = null,
+    namaFileCsv: String = "rekap-kehadiran.csv"
 ) {
-    // Disimpan sebagai sessionId supaya pilihan tetap sama setelah data dimuat ulang
-    var dipilihId by remember { mutableStateOf(riwayat.firstOrNull()?.sessionId) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pesanEkspor by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // teks, isError
+    // Pilih lokasi simpan (Download, Drive, dll) lewat pemilih file Android; tanpa izin penyimpanan
+    val simpanCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri == null || buatCsv == null) return@rememberLauncherForActivityResult
+        pesanEkspor = try {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                // BOM supaya Excel membaca huruf dengan benar (UTF-8)
+                out.write("\uFEFF".toByteArray(Charsets.UTF_8))
+                out.write(buatCsv().toByteArray(Charsets.UTF_8))
+            } ?: throw IllegalStateException("File tidak bisa dibuat.")
+            "Rekap tersimpan. Buka dengan Excel atau Google Sheets." to false
+        } catch (e: Exception) {
+            "Gagal menyimpan: ${pesanGalat(e)}" to true
+        }
+    }
+    var perMahasiswa by remember { mutableStateOf(false) }
+    var hapusTarget by remember { mutableStateOf<Pertemuan?>(null) }
+    // Disimpan sebagai sessionId supaya pilihan tetap sama setelah data dimuat ulang.
+    // Default: pertemuan terbaru yang sudah dimulai (bukan yang masih terjadwal).
+    var dipilihId by remember {
+        mutableStateOf((riwayat.firstOrNull { !it.terjadwal } ?: riwayat.firstOrNull())?.sessionId)
+    }
     val pertemuan = riwayat.firstOrNull { it.sessionId == dipilihId } ?: riwayat.firstOrNull()
     val catatan = if (pertemuan != null) catatanUntuk(pertemuan) else emptyList()
-    val label = { p: Pertemuan -> "Pertemuan ${p.nomor} · ${p.tanggal}" }
+    val label = { p: Pertemuan -> "Pertemuan ${p.nomor} · ${p.tanggal}" + if (p.terjadwal) " (terjadwal)" else "" }
 
     Scaffold(
         modifier,
@@ -59,6 +91,28 @@ fun RekapKehadiran(
             item {
                 SectionCard("Rekap Kehadiran") {
                     Text(matkul.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                    PilihanTab(
+                        opsi = listOf("Per Pertemuan", "Per Mahasiswa"),
+                        terpilih = if (perMahasiswa) 1 else 0,
+                        onPilih = { perMahasiswa = it == 1 }
+                    )
+                }
+            }
+            if (perMahasiswa) {
+                if (buatCsv != null) item {
+                    SectionCard {
+                        SecondaryButton("Ekspor Rekap ke Excel (CSV)", { simpanCsv.launch(namaFileCsv) })
+                        HelperText("Berisi status tiap pertemuan (H/I/S/A), jumlah, dan % hadir setiap mahasiswa.")
+                        pesanEkspor?.let { (teks, error) ->
+                            if (error) ErrorText(teks) else HelperText(teks, color = StatusSuccess)
+                        }
+                    }
+                }
+                isiPerMahasiswa(rekapMahasiswa)
+                return@LazyColumn
+            }
+            item {
+                SectionCard {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FieldLabel("Pertemuan")
                         SelectField(
@@ -89,12 +143,16 @@ fun RekapKehadiran(
             }
             if (pertemuan != null) {
                 item { SectionTitle("Daftar Mahasiswa") }
+                if (pertemuan.terjadwal) item {
+                    HelperText("Pertemuan ini belum dimulai, jadi status kehadiran belum bisa diubah.")
+                }
                 if (catatan.isEmpty()) item { HelperText("Belum ada peserta.") }
                 items(catatan) { c ->
                     KartuCatatan(
                         c,
                         onUbah = { statusBaru -> onUbahStatus(pertemuan, c.uid, statusBaru) },
-                        onLihat = { onLihatKeterangan(pertemuan, c) }
+                        onLihat = { onLihatKeterangan(pertemuan, c) },
+                        bisaDiubah = !pertemuan.terjadwal
                     )
                 }
                 item {
@@ -103,13 +161,36 @@ fun RekapKehadiran(
                             "perubahan oleh dosen tercatat sebagai \"manual\"."
                     )
                 }
+                if (onHapusPertemuan != null) item {
+                    SecondaryButton("Hapus Pertemuan ${pertemuan.nomor}", { hapusTarget = pertemuan }, color = StatusDanger)
+                }
             }
         }
+    }
+
+    hapusTarget?.let { p ->
+        ConfirmDialog(
+            title = "Hapus Pertemuan ${p.nomor}?",
+            text = "Pertemuan ${p.nomor} (${p.tanggal}, ${p.waktu}) beserta data kehadiran dan foto bukti izin/sakit " +
+                "di pertemuan ini dihapus permanen. Gunakan untuk sesi yang salah dibuat.",
+            confirmText = "Hapus",
+            onConfirm = {
+                hapusTarget = null
+                dipilihId = null
+                onHapusPertemuan?.invoke(p)
+            },
+            onDismiss = { hapusTarget = null }
+        )
     }
 }
 
 @Composable
-private fun KartuCatatan(c: CatatanKehadiran, onUbah: (AttendanceStatus) -> Unit, onLihat: () -> Unit) {
+private fun KartuCatatan(
+    c: CatatanKehadiran,
+    onUbah: (AttendanceStatus) -> Unit,
+    onLihat: () -> Unit,
+    bisaDiubah: Boolean = true
+) {
     ItemCard {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(c.nama)
@@ -117,7 +198,80 @@ private fun KartuCatatan(c: CatatanKehadiran, onUbah: (AttendanceStatus) -> Unit
             KeteranganRingkas(c.keterangan, c.adaBukti, onLihat)
         }
         Spacer(Modifier.width(12.dp))
-        PilihStatus(c.status, onUbah)
+        if (bisaDiubah) PilihStatus(c.status, onUbah) else StatusPill(c.status.label, c.status.color)
+    }
+}
+
+/** Isi tab "Per Mahasiswa": ringkasan kelas lalu kartu tiap mahasiswa. */
+private fun androidx.compose.foundation.lazy.LazyListScope.isiPerMahasiswa(rekap: List<RekapMahasiswa>) {
+    val totalPertemuan = rekap.maxOfOrNull { it.total } ?: 0
+    if (rekap.isEmpty() || totalPertemuan == 0) {
+        item { HelperText("Belum ada pertemuan yang selesai, jadi rekap per mahasiswa belum tersedia.") }
+        return
+    }
+    val rataRata = rekap.map { it.persenHadir }.average().let { Math.round(it) }
+    item {
+        SectionCard {
+            Text(
+                "Rata-rata kehadiran kelas: $rataRata%",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = UnsNavy
+            )
+            HelperText("Dari $totalPertemuan pertemuan yang sudah selesai. Diurutkan dari kehadiran terendah.")
+        }
+    }
+    item { SectionTitle("Daftar Mahasiswa") }
+    items(rekap.sortedWith(compareBy({ it.persenHadir }, { it.nama }))) { KartuRekapMahasiswa(it) }
+}
+
+@Composable
+private fun KartuRekapMahasiswa(r: RekapMahasiswa) {
+    val warna = when {
+        r.persenHadir >= 75 -> StatusSuccess
+        r.persenHadir >= 50 -> StatusWarning
+        else -> StatusDanger
+    }
+    ItemCard {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ItemTitle(r.nama)
+            ItemSubtitle("${r.nim} · Hadir ${r.hadir} dari ${r.total}")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                StatusPill("I ${r.izin}", AttendanceStatus.Izin.color)
+                StatusPill("S ${r.sakit}", AttendanceStatus.Sakit.color)
+                StatusPill("A ${r.alpa}", AttendanceStatus.Alpa.color)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text("${r.persenHadir}%", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = readableColor(warna))
+    }
+}
+
+/** Dua/lebih pilihan berjajar untuk berpindah tampilan. */
+@Composable
+private fun PilihanTab(opsi: List<String>, terpilih: Int, onPilih: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        opsi.forEachIndexed { i, teks ->
+            val aktif = i == terpilih
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onPilih(i) },
+                shape = RoundedCornerShape(10.dp),
+                color = if (aktif) UnsBlue else UnsBlue.copy(alpha = 0.08f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        teks,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (aktif) androidx.compose.ui.graphics.Color.White else UnsBlue
+                    )
+                }
+            }
+        }
     }
 }
 
