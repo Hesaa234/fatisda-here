@@ -17,7 +17,7 @@ import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-private enum class LayarAdmin { BERANDA, AKUN, TAMBAH_AKUN, MATKUL, TAMBAH_MATKUL, EDIT_MATKUL, PESERTA, RUANGAN, TES_KNN, PROFIL }
+private enum class LayarAdmin { BERANDA, AKUN, TAMBAH_AKUN, EDIT_AKUN, MATKUL, TAMBAH_MATKUL, EDIT_MATKUL, PESERTA, RUANGAN, TES_KNN, PROFIL }
 
 private class DataAdmin(val users: List<AppUser>, val courses: List<Course>, val rooms: List<Room>) {
     val usersById = users.associateBy { it.uid }
@@ -34,6 +34,7 @@ private suspend fun muatDataAdmin(c: AppContainer) = DataAdmin(
 /**
  * Alur admin:
  * Beranda -> Akun -> Tambah Akun
+ *                 -> (pilih akun) Edit Akun (nama, NIM/NIP, kirim email reset kata sandi)
  * Beranda -> Mata Kuliah -> Tambah Mata Kuliah
  *                        -> (pilih matkul) Edit Mata Kuliah -> Kelola Peserta
  * Beranda -> Ruangan (hanya lihat)
@@ -53,6 +54,12 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     var simpanAkunLoading by remember { mutableStateOf(false) }
     var simpanAkunGalat by remember { mutableStateOf<String?>(null) }
     var pesanAkun by remember { mutableStateOf<String?>(null) }
+
+    // --- state edit akun ---
+    var akunIdTerpilih by rememberSaveable { mutableStateOf<String?>(null) }
+    var editAkunLoading by remember { mutableStateOf(false) }
+    var editAkunGalat by remember { mutableStateOf<String?>(null) }
+    var editAkunPesan by remember { mutableStateOf<String?>(null) }
 
     // --- state form matkul ---
     var simpanMatkulLoading by remember { mutableStateOf(false) }
@@ -89,7 +96,7 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
 
     BackHandler(enabled = layar != LayarAdmin.BERANDA) {
         layar = when (layar) {
-            LayarAdmin.TAMBAH_AKUN -> LayarAdmin.AKUN
+            LayarAdmin.TAMBAH_AKUN, LayarAdmin.EDIT_AKUN -> LayarAdmin.AKUN
             LayarAdmin.TAMBAH_MATKUL, LayarAdmin.EDIT_MATKUL -> LayarAdmin.MATKUL
             LayarAdmin.PESERTA -> LayarAdmin.EDIT_MATKUL
             else -> LayarAdmin.BERANDA
@@ -143,8 +150,67 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
             },
             onBack = keBeranda,
             onProfileClick = keProfil,
-            pesan = pesanAkun
+            pesan = pesanAkun,
+            onAkunClick = {
+                akunIdTerpilih = it.uid
+                editAkunGalat = null
+                editAkunPesan = null
+                layar = LayarAdmin.EDIT_AKUN
+            }
         )
+
+        layar == LayarAdmin.EDIT_AKUN && akunIdTerpilih?.let { d.usersById[it] } != null -> {
+            val target = d.usersById.getValue(akunIdTerpilih!!)
+            val akunUi = AkunUi(
+                target.uid, target.name, target.email, target.role,
+                if (target.role == Role.MAHASISWA) target.nim else target.nip
+            )
+            EditAkun(
+                username = user.name,
+                akun = akunUi,
+                nomorTerpakai = if (target.role == Role.MAHASISWA) nimTerpakai else nipTerpakai,
+                isLoading = editAkunLoading,
+                errorMessage = editAkunGalat,
+                pesan = editAkunPesan,
+                onSimpan = { namaBaru, nomorBaru ->
+                    scope.launch {
+                        editAkunLoading = true
+                        editAkunGalat = null
+                        editAkunPesan = null
+                        try {
+                            container.userRepository.updateUser(
+                                target.copy(
+                                    name = namaBaru,
+                                    nim = if (target.role == Role.MAHASISWA) nomorBaru else target.nim,
+                                    nip = if (target.role == Role.DOSEN) nomorBaru else target.nip
+                                )
+                            )
+                            pesanAkun = "Akun $namaBaru berhasil diperbarui."
+                            layar = LayarAdmin.AKUN
+                            versi++
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            editAkunGalat = pesanGalat(e)
+                        }
+                        editAkunLoading = false
+                    }
+                },
+                onKirimResetSandi = {
+                    scope.launch {
+                        editAkunLoading = true
+                        editAkunGalat = null
+                        editAkunPesan = null
+                        container.authRepository.sendPasswordReset(target.email)
+                            .onSuccess { editAkunPesan = "Email reset kata sandi terkirim ke ${target.email}." }
+                            .onFailure { editAkunGalat = pesanGalat(it) }
+                        editAkunLoading = false
+                    }
+                },
+                onBack = { layar = LayarAdmin.AKUN },
+                onProfileClick = keProfil
+            )
+        }
 
         layar == LayarAdmin.TAMBAH_AKUN -> FormAkun(
             username = user.name,
@@ -260,6 +326,24 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
                 }
             },
             onKelolaPeserta = { layar = LayarAdmin.PESERTA },
+            onHapus = {
+                scope.launch {
+                    simpanMatkulLoading = true
+                    simpanMatkulGalat = null
+                    try {
+                        container.courseRepository.deleteCourse(course.id)
+                        pesanMatkul = "Mata kuliah (${course.code}) ${course.name} berhasil dihapus."
+                        courseIdTerpilih = null
+                        layar = LayarAdmin.MATKUL
+                        versi++
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        simpanMatkulGalat = pesanGalat(e)
+                    }
+                    simpanMatkulLoading = false
+                }
+            },
             onBack = { layar = LayarAdmin.MATKUL },
             onProfileClick = keProfil
         )

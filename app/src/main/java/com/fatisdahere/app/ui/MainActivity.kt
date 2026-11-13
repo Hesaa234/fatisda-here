@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
@@ -15,10 +16,13 @@ import com.fatisdahere.app.data.Role
 import com.fatisdahere.app.di.AppContainer
 import com.fatisdahere.app.ui.admin.AdminApp
 import com.fatisdahere.app.ui.auth.LoginScreen
+import com.fatisdahere.app.ui.components.FatisdaTopBar
+import com.fatisdahere.app.ui.components.LoadingContent
 import com.fatisdahere.app.ui.debug.DebugPositioningScreen
 import com.fatisdahere.app.ui.dosen.DosenApp
 import com.fatisdahere.app.ui.mahasiswa.MahasiswaApp
 import com.fatisdahere.app.ui.theme.FatisdaTheme
+import com.fatisdahere.app.ui.theme.PageBackground
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -63,7 +67,10 @@ private val AppUserSaver = listSaver<AppUser?, String>(
     }
 )
 
-/** Login, lalu arahkan ke halaman sesuai role akun. */
+/**
+ * Login, lalu arahkan ke halaman sesuai role akun.
+ * Login diingat: saat aplikasi dibuka, sesi Firebase yang masih ada dipulihkan tanpa login ulang.
+ */
 @Composable
 private fun FatisdaApp(container: AppContainer) {
     var user by rememberSaveable(stateSaver = AppUserSaver) { mutableStateOf<AppUser?>(null) }
@@ -71,7 +78,23 @@ private fun FatisdaApp(container: AppContainer) {
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // true selama memeriksa sesi login sebelumnya (hanya sekali saat aplikasi dibuka)
+    var memulihkan by rememberSaveable { mutableStateOf(user == null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        if (memulihkan) {
+            if (user == null) user = container.authRepository.currentUser()
+            memulihkan = false
+        }
+    }
+
+    if (memulihkan) {
+        Scaffold(topBar = { FatisdaTopBar() }, containerColor = PageBackground) { padding ->
+            LoadingContent(padding)
+        }
+        return
+    }
 
     val logout: () -> Unit = {
         scope.launch { container.authRepository.signOut() }

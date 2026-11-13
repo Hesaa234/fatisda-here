@@ -4,8 +4,9 @@ rules_version = '2';
 // Cara pasang: Firebase Console > Firestore Database > tab Rules > tempel seluruh isi file ini > Publish.
 // Peran dibaca dari users/{uid}.role: "mahasiswa", "dosen", atau "admin".
 //
-// Catatan: validasi posisi (KNN) tetap dilakukan di aplikasi; rules hanya memastikan
-// setiap orang hanya bisa mengubah data miliknya sendiri.
+// Catatan: validasi posisi (KNN) tetap dilakukan di aplikasi. Rules memastikan setiap orang
+// hanya mengubah data miliknya sendiri, dan absen mahasiswa hanya diterima saat sesi terbuka
+// menurut JAM SERVER (mengubah jam HP tidak berpengaruh) dan hanya untuk peserta matkul.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -28,6 +29,19 @@ service cloud.firestore {
     function isLecturerOf(courseId) {
       return isDosen()
         && get(/databases/$(database)/documents/courses/$(courseId)).data.lecturerId == request.auth.uid;
+    }
+
+    // Sesi masih terbuka menurut JAM SERVER: belum ditutup dan sekarang ada di antara startAt dan endAt
+    function sessionOpen(sessionId) {
+      let s = get(/databases/$(database)/documents/sessions/$(sessionId)).data;
+      return (!('closedAt' in s) || s.closedAt == null)
+        && request.time >= s.startAt
+        && request.time <= s.endAt;
+    }
+
+    // Mahasiswa terdaftar sebagai peserta mata kuliah
+    function isStudentOf(courseId) {
+      return request.auth.uid in get(/databases/$(database)/documents/courses/$(courseId)).data.studentIds;
     }
 
     // ---------- users ----------
@@ -56,7 +70,9 @@ service cloud.firestore {
         || (isDosen()
             && resource.data.lecturerId == request.auth.uid
             && request.resource.data.lecturerId == request.auth.uid);
-      allow delete: if isAdmin();
+      // Dihapus admin, atau dosen pengampunya sendiri
+      allow delete: if isAdmin()
+        || (isDosen() && resource.data.lecturerId == request.auth.uid);
     }
 
     // ---------- sessions ----------
@@ -75,10 +91,13 @@ service cloud.firestore {
       allow read: if isAdmin() || isDosen()
         || (isMahasiswa() && (resource == null || resource.data.studentId == request.auth.uid));
 
-      // Mahasiswa absen untuk dirinya sendiri, id dokumen harus sessionId_uid
+      // Mahasiswa absen untuk dirinya sendiri: id dokumen harus sessionId_uid, terdaftar di
+      // matkulnya, dan sesi masih terbuka menurut jam server
       allow create: if (isMahasiswa()
           && request.resource.data.studentId == request.auth.uid
-          && attendanceId == request.resource.data.sessionId + '_' + request.auth.uid)
+          && attendanceId == request.resource.data.sessionId + '_' + request.auth.uid
+          && isStudentOf(request.resource.data.courseId)
+          && sessionOpen(request.resource.data.sessionId))
         || isAdmin()
         || isLecturerOf(request.resource.data.courseId);
 
@@ -94,6 +113,8 @@ service cloud.firestore {
       allow create: if isMahasiswa()
         && request.resource.data.studentId == request.auth.uid
         && proofId == request.resource.data.sessionId + '_' + request.auth.uid
+        && isStudentOf(request.resource.data.courseId)
+        && sessionOpen(request.resource.data.sessionId)
         && request.resource.data.imageBase64 is string
         && request.resource.data.imageBase64.size() <= 900000;
 

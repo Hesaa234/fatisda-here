@@ -12,6 +12,12 @@ interface AuthRepository {
     /** Berhasil: data user (termasuk role). Gagal: Result.failure dengan pesan yang bisa ditampilkan. */
     suspend fun signIn(email: String, password: String): Result<AppUser>
     suspend fun signOut()
+
+    /** User yang masih login dari pembukaan aplikasi sebelumnya (login diingat), null kalau tidak ada. */
+    suspend fun currentUser(): AppUser?
+
+    /** Kirim email reset kata sandi (dipakai admin). */
+    suspend fun sendPasswordReset(email: String): Result<Unit>
 }
 
 /** Data untuk membuat akun baru dari halaman admin. */
@@ -35,6 +41,9 @@ interface UserRepository {
 
     /** Admin: buat akun login + dokumen users/{uid}. Admin tetap login. */
     suspend fun createAccount(account: NewAccount): Result<AppUser>
+
+    /** Ubah nama dan NIM/NIP (email dan peran tidak diubah). Khusus admin. */
+    suspend fun updateUser(user: AppUser)
 }
 
 interface RoomRepository {
@@ -54,6 +63,9 @@ interface CourseRepository {
     suspend fun setStudents(courseId: String, studentIds: List<String>)
     suspend fun addStudent(courseId: String, studentId: String)
     suspend fun removeStudent(courseId: String, studentId: String)
+
+    /** Hapus mata kuliah beserta semua sesi, kehadiran, dan foto buktinya. */
+    suspend fun deleteCourse(courseId: String)
 }
 
 interface SessionRepository {
@@ -68,6 +80,15 @@ interface SessionRepository {
         endAtMs: Long,
     ): AttendanceSession
     suspend fun closeSession(sessionId: String, nowMs: Long)
+
+    /** Hapus satu sesi (pertemuan) beserta kehadiran dan foto buktinya. */
+    suspend fun deleteSession(sessionId: String)
+
+    /**
+     * Pantau perubahan sesi matkul secara realtime (dipakai notifikasi sesi dibuka).
+     * Mengembalikan fungsi untuk berhenti memantau.
+     */
+    fun listenSessions(courseIds: List<String>, onChange: (List<AttendanceSession>) -> Unit): () -> Unit
 }
 
 interface AttendanceRepository {

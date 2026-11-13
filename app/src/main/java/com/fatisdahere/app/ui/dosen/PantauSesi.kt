@@ -23,10 +23,12 @@ fun PantauSesi(
     onBack: () -> Unit,
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onLihatKeterangan: (KehadiranMahasiswa) -> Unit = {}
+    onLihatKeterangan: (KehadiranMahasiswa) -> Unit = {},
+    diperbarui: String? = null
 ) {
     var tampilDialog by remember { mutableStateOf(false) }
     val hadir = daftarKehadiran.count { it.status == AttendanceStatus.Hadir }
+    val sudahMasuk = daftarKehadiran.count { it.status != AttendanceStatus.BelumAbsen }
 
     Scaffold(
         modifier,
@@ -57,6 +59,26 @@ fun PantauSesi(
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
                     }
+                    // Rincian: Hadir / Izin / Sakit / Belum Absen
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        listOf(
+                            AttendanceStatus.Hadir, AttendanceStatus.Izin, AttendanceStatus.Sakit, AttendanceStatus.BelumAbsen
+                        ).forEach { s ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "${daftarKehadiran.count { it.status == s }}",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = readableColor(s.color)
+                                )
+                                Text(s.label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f))
+                            }
+                        }
+                    }
+                    HelperText(
+                        "$sudahMasuk dari ${daftarKehadiran.size} mahasiswa sudah mengisi absen" +
+                            (diperbarui?.let { " · diperbarui $it (otomatis tiap 10 detik)" } ?: "")
+                    )
                     SecondaryButton("Tutup Sesi Lebih Awal", { tampilDialog = true }, color = StatusDanger)
                 }
             }
