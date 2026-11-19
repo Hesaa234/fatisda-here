@@ -19,7 +19,7 @@ fun StudentProfileScreen(
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(name, onBack = onBack) },
+        topBar = { HeaderGradien(judul = "Profil", subjudul = name, onBack = onBack) },
         containerColor = PageBackground
     ) { padding ->
         ProfileContent(

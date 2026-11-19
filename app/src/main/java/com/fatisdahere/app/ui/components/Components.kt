@@ -1,18 +1,26 @@
 package com.fatisdahere.app.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,77 +28,51 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fatisdahere.app.ui.theme.*
 
-/*
- * Komponen bersama untuk SEMUA halaman (mahasiswa, dosen, admin).
- * Kalau butuh tampilan baru, tambahkan di sini dulu supaya gaya tetap seragam,
- * jangan membuat warna atau bentuk sendiri di file layar.
- */
-
-// ---------------------------------------------------------------- Header
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FatisdaTopBar(
     userName: String? = null,
     onUserClick: () -> Unit = {},
     onBack: (() -> Unit)? = null
 ) {
-    TopAppBar(
-        title = {
-            Text(
-                "FATISDA Here",
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        navigationIcon = {
-            if (onBack != null) IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-            }
-        },
-        actions = {
-            if (userName != null) {
-                Row(
-                    Modifier
-                        .padding(end = 12.dp)
-                        .clip(RoundedCornerShape(50))
-                        .clickable(onClick = onUserClick)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(Icons.Filled.AccountCircle, null, Modifier.size(28.dp))
-                    Text(
-                        userName,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 140.dp)
-                    )
-                }
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = UnsBlue,
-            titleContentColor = Color.White,
-            navigationIconContentColor = Color.White,
-            actionIconContentColor = Color.White
-        )
+    HeaderGradien(
+        judul = "FATISDA Here",
+        onBack = onBack,
+        userName = userName,
+        onUserClick = onUserClick
     )
 }
 
-// ---------------------------------------------------------------- Kartu & teks
+@Composable
+fun HeaderHalaman(
+    judul: String,
+    subjudul: String?,
+    username: String,
+    onProfileClick: () -> Unit,
+    onBack: (() -> Unit)? = null,
+    isi: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    HeaderGradien(
+        judul = judul,
+        subjudul = subjudul,
+        onBack = onBack,
+        userName = username,
+        onUserClick = onProfileClick,
+        isi = isi
+    )
+}
 
 @Composable
 fun SectionCard(
@@ -99,47 +81,65 @@ fun SectionCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.fillMaxWidth().muncul().animateContentSize(),
+        shape = BentukKartu,
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(3.dp)
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (title != null) Text(
-                title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy
+                title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = UnsNavy
             )
             content()
         }
     }
 }
 
-/** Kartu satu baris untuk isi daftar (mata kuliah, pertemuan, peserta, dll). */
 @Composable
 fun ItemCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    inisial: String? = null,
+    warnaInisial: Color = UnsBlue,
     content: @Composable RowScope.() -> Unit
 ) {
     val clickModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
     Card(
-        modifier = modifier.fillMaxWidth().then(clickModifier),
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.fillMaxWidth().muncul(),
+        shape = BentukItem,
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth().then(clickModifier).padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (inisial != null) {
+                LingkaranIkon(44.dp, warnaInisial) {
+                    Text(
+                        inisial.trim().take(2).uppercase(),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = warnaInisial
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+            }
+            content()
+        }
     }
 }
 
-/** Judul di atas daftar, contoh "Mata Kuliah Saya". */
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+    Text(
+        text,
+        modifier.padding(start = 2.dp, top = 8.dp),
+        fontSize = 17.sp,
+        fontWeight = FontWeight.Bold,
+        color = UnsNavy
+    )
 }
 
 @Composable
@@ -149,11 +149,11 @@ fun ItemTitle(text: String) {
 
 @Composable
 fun ItemSubtitle(text: String) {
-    Text(text, fontSize = 13.sp, color = TextPrimary.copy(alpha = 0.7f))
+    Text(text, fontSize = 13.sp, color = TextMuted)
 }
 
 @Composable
-fun HelperText(text: String, color: Color = TextPrimary.copy(alpha = 0.65f)) {
+fun HelperText(text: String, color: Color = TextMuted) {
     Text(text, fontSize = 13.sp, color = color)
 }
 
@@ -162,16 +162,15 @@ fun ErrorText(text: String) {
     Text(text, fontSize = 13.sp, color = StatusDanger)
 }
 
-/** Warna teks untuk label berwarna (kuning & abu-abu dibuat kontras supaya terbaca). */
 fun readableColor(color: Color): Color = when (color) {
-    StatusWarning -> Color(0xFF8A6D00)
-    StatusGray -> Color(0xFF495057)
+    StatusWarning -> Color(0xFF9A6B00)
+    StatusGray -> Color(0xFF4A6075)
     else -> color
 }
 
 @Composable
 fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(50), color = color.copy(alpha = 0.15f)) {
+    Surface(modifier, shape = BentukPil, color = color.copy(alpha = 0.15f)) {
         Text(
             text,
             Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -184,7 +183,7 @@ fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
 
 @Composable
 fun LiveBadge(modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(50), color = UnsTeal.copy(alpha = 0.12f)) {
+    Surface(modifier, shape = BentukPil, color = UnsTeal.copy(alpha = 0.14f)) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -198,37 +197,88 @@ fun LiveBadge(modifier: Modifier = Modifier) {
 
 @Composable
 fun InfoRow(label: String, value: String) {
-    Row {
-        Text(label, Modifier.width(64.dp), fontSize = 14.sp, color = TextPrimary.copy(alpha = 0.7f))
-        Text(": $value", fontSize = 14.sp, color = TextPrimary)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(label, Modifier.width(72.dp), fontSize = 13.sp, color = TextMuted)
+        Text(value, Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
     }
 }
 
 @Composable
 fun SessionInfo(session: SessionUi) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(session.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         InfoRow("Waktu", session.time)
         InfoRow("Ruang", session.room)
         InfoRow("Dosen", session.lecturer)
     }
 }
 
-// ---------------------------------------------------------------- Tombol
-
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(48.dp),
-        enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = UnsBlue)
-    ) { Text(text, fontWeight = FontWeight.Bold) }
+    val latar = if (enabled) GradienUtama else Brush.linearGradient(listOf(TrackBlue, TrackBlue))
+    val sumber = remember { MutableInteractionSource() }
+    val ditekan by sumber.collectIsPressedAsState()
+    val skala by animateFloatAsState(if (ditekan && enabled) 0.96f else 1f, tween(120), label = "tekan")
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .graphicsLayer { scaleX = skala; scaleY = skala }
+            .clip(BentukPil)
+            .background(latar)
+            .clickable(
+                interactionSource = sumber,
+                indication = LocalIndication.current,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            color = if (enabled) Color.White else TextMuted,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+    }
 }
 
-/** Tombol garis tepi. Pakai color = StatusDanger untuk aksi seperti "Tutup Sesi". */
+@Composable
+fun TombolMini(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    warna: Color = UnsBlue,
+    terisi: Boolean = true,
+    enabled: Boolean = true
+) {
+    if (terisi) {
+        Button(
+            onClick = onClick,
+            modifier = modifier.height(42.dp),
+            enabled = enabled,
+            shape = BentukPil,
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = warna)
+        ) { Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier.height(42.dp),
+            enabled = enabled,
+            shape = BentukPil,
+            contentPadding = PaddingValues(horizontal = 18.dp),
+            border = BorderStroke(1.5.dp, warna),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = warna)
+        ) { Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+    }
+}
+
 @Composable
 fun SecondaryButton(
     text: String,
@@ -239,10 +289,10 @@ fun SecondaryButton(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(48.dp),
+        modifier = modifier.fillMaxWidth().height(50.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, if (enabled) color else TextPrimary.copy(alpha = 0.2f)),
+        shape = BentukPil,
+        border = BorderStroke(1.5.dp, if (enabled) color else TextPrimary.copy(alpha = 0.2f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = color)
     ) { Text(text, fontWeight = FontWeight.Bold) }
 }
@@ -251,17 +301,15 @@ fun SecondaryButton(
 fun DangerButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Button(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(48.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth().height(50.dp),
+        shape = BentukPil,
         colors = ButtonDefaults.buttonColors(containerColor = StatusDanger)
     ) { Text(text, fontWeight = FontWeight.Bold) }
 }
 
-// ---------------------------------------------------------------- Form
-
 @Composable
 fun FieldLabel(text: String) {
-    Text(text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+    Text(text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextMuted)
 }
 
 @Composable
@@ -277,11 +325,20 @@ fun AppTextField(
         modifier = modifier.fillMaxWidth(),
         placeholder = { Text(placeholder) },
         singleLine = true,
-        shape = RoundedCornerShape(12.dp)
+        shape = BentukField,
+        colors = warnaField()
     )
 }
 
-/** Kotak yang bisa diklik, bentuknya sama dengan kolom isian (dipakai untuk pilihan dan jam). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun warnaField() = TextFieldDefaults.outlinedTextFieldColors(
+    focusedBorderColor = UnsBlue,
+    unfocusedBorderColor = TextMuted.copy(alpha = 0.4f),
+    cursorColor = UnsBlue,
+    containerColor = SurfaceWhite
+)
+
 @Composable
 fun ClickableField(
     text: String?,
@@ -294,11 +351,11 @@ fun ClickableField(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(BentukField)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = BentukField,
         color = if (enabled) SurfaceWhite else PageBackground,
-        border = BorderStroke(1.dp, TextPrimary.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.45f))
     ) {
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -311,13 +368,12 @@ fun ClickableField(
                 color = if (text == null) TextPrimary.copy(alpha = 0.5f) else TextPrimary
             )
             if (enabled && trailingIcon != null) {
-                Icon(trailingIcon, contentDescription = null, tint = TextPrimary.copy(alpha = 0.6f))
+                Icon(trailingIcon, contentDescription = null, tint = TextMuted)
             }
         }
     }
 }
 
-/** Pilihan dari daftar (dropdown). onSelect menerima index pilihan. */
 @Composable
 fun SelectField(
     value: String?,
@@ -355,8 +411,6 @@ fun SelectField(
     }
 }
 
-// ---------------------------------------------------------------- Lain-lain
-
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -368,25 +422,21 @@ fun ConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
+        containerColor = SurfaceWhite,
+        shape = BentukKartu,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = UnsNavy, fontSize = 18.sp) },
+        text = { Text(text, color = TextPrimary, fontSize = 14.sp) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(confirmText, color = if (danger) StatusDanger else UnsBlue, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Batal") }
+            TextButton(onClick = onDismiss) { Text("Batal", color = TextMuted, fontWeight = FontWeight.SemiBold) }
         }
     )
 }
 
-/*
- * CATATAN: jangan pakai CircularProgressIndicator() / LinearProgressIndicator() tanpa "progress"
- * (versi berputar terus). Di proyek ini material3 (BOM 2023.08) dipakai bersama
- * material-icons-extended 1.6.0, dan kombinasi itu membuat animasinya crash
- * (NoSuchMethodError ... KeyframesSpec). Versi dengan progress = angka aman.
- */
 @Composable
 fun LoadingContent(padding: PaddingValues = PaddingValues(0.dp)) {
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -394,7 +444,6 @@ fun LoadingContent(padding: PaddingValues = PaddingValues(0.dp)) {
     }
 }
 
-/** Pengganti isi halaman saat data gagal dimuat. */
 @Composable
 fun ErrorContent(message: String, onRetry: () -> Unit, padding: PaddingValues = PaddingValues(0.dp), onLogout: (() -> Unit)? = null) {
     Column(
@@ -409,18 +458,18 @@ fun ErrorContent(message: String, onRetry: () -> Unit, padding: PaddingValues = 
     }
 }
 
-/** Dialog pesan kesalahan (misalnya gagal menyimpan). */
 @Composable
 fun ErrorDialog(message: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Terjadi kesalahan") },
-        text = { Text(message) },
+        containerColor = SurfaceWhite,
+        shape = BentukKartu,
+        title = { Text("Terjadi kesalahan", fontWeight = FontWeight.Bold, color = UnsNavy, fontSize = 18.sp) },
+        text = { Text(message, color = TextPrimary, fontSize = 14.sp) },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK", color = UnsBlue, fontWeight = FontWeight.Bold) } }
     )
 }
 
-/** Pesan yang ditampilkan ke pengguna dari sebuah exception. */
 fun pesanGalat(e: Throwable): String {
     val m = e.message.orEmpty()
     return when {
@@ -433,7 +482,6 @@ fun pesanGalat(e: Throwable): String {
     }
 }
 
-/** Isi halaman profil, sama untuk mahasiswa, dosen, dan admin. fields = (label, nilai). */
 @Composable
 fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit, padding: PaddingValues) {
     var konfirmasiKeluar by remember { mutableStateOf(false) }
@@ -453,21 +501,22 @@ fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit
         Modifier.fillMaxSize().padding(padding).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        SectionCard("Profil") {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
+        SectionCard {
+            Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Box(
-                    Modifier.size(96.dp).background(UnsBlue.copy(alpha = 0.12f), CircleShape),
+                    Modifier.size(88.dp).background(GradienUtama, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Person, null, Modifier.size(56.dp), tint = UnsBlue)
+                    Icon(Icons.Filled.Person, null, Modifier.size(52.dp), tint = Color.White)
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     fields.forEach { (label, value) ->
                         Column {
-                            Text(label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.6f))
+                            Text(label, fontSize = 12.sp, color = TextMuted)
                             Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
                         }
                     }
@@ -475,5 +524,103 @@ fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit
             }
         }
         DangerButton("Log Out", { konfirmasiKeluar = true })
+    }
+}
+
+@Composable
+fun KartuKosong(teks: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth().muncul(),
+        shape = BentukItem,
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LingkaranIkon(40.dp, TextMuted) {
+                Icon(Icons.Filled.Info, contentDescription = null, Modifier.size(22.dp), tint = TextMuted)
+            }
+            Text(teks, Modifier.weight(1f), fontSize = 14.sp, color = TextMuted)
+        }
+    }
+}
+
+data class ItemStat(val angka: String, val label: String, val warna: Color)
+
+@Composable
+fun StatistikBaris(items: List<ItemStat>, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach { item ->
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(item.warna.copy(alpha = 0.12f))
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(item.angka, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = readableColor(item.warna))
+                Text(item.label, fontSize = 11.sp, color = TextMuted, maxLines = 1, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+@Composable
+fun TabPil(opsi: List<String>, terpilih: Int, onPilih: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(BentukPil)
+            .background(TrackBlue)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        opsi.forEachIndexed { i, teks ->
+            val aktif = i == terpilih
+            val warnaLatar by animateColorAsState(if (aktif) UnsBlue else Color.Transparent, tween(250), label = "tabLatar")
+            val warnaTeks by animateColorAsState(if (aktif) Color.White else TextMuted, tween(250), label = "tabTeks")
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(BentukPil)
+                    .background(warnaLatar)
+                    .clickable(role = Role.Tab) { onPilih(i) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    teks,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = warnaTeks,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BatangProgres(persen: Int, warna: Color, modifier: Modifier = Modifier) {
+    var mulai by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { mulai = true }
+    val isi by animateFloatAsState(
+        if (mulai) persen.coerceIn(0, 100) / 100f else 0f,
+        tween(800),
+        label = "batang"
+    )
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(BentukPil)
+            .background(warna.copy(alpha = 0.15f))
+    ) {
+        if (isi > 0f) Box(Modifier.fillMaxWidth(isi).fillMaxHeight().clip(BentukPil).background(warna))
     }
 }

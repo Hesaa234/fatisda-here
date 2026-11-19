@@ -79,13 +79,17 @@ fun BerandaAdmin(
     onTesKnn: () -> Unit = {}
 ) {
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick) },
+        topBar = {
+            HeaderGradien(judul = "Panel Admin", subjudul = "Halo, $username", userName = username, onUserClick = onProfileClick) {
+                StatistikHeader(listOf("$jumlahAkun" to "Akun", "$jumlahMatkul" to "Mata Kuliah", "$jumlahRuangan" to "Ruangan"))
+            }
+        },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { SectionTitle("Panel Admin") }
             item { MenuCard("Akun", "$jumlahAkun akun mahasiswa, dosen, dan admin", onAkun) }
@@ -98,9 +102,9 @@ fun BerandaAdmin(
 
 @Composable
 private fun MenuCard(judul: String, keterangan: String, onClick: () -> Unit) {
-    ItemCard(onClick = onClick) {
+    ItemCard(onClick = onClick, inisial = judul.take(1)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(judul, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+            Text(judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
             ItemSubtitle(keterangan)
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = UnsBlue)
@@ -130,16 +134,16 @@ fun DaftarAkun(
     }
 
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Akun", "Kelola akun mahasiswa, dosen, dan admin", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Akun") {
+                SectionCard {
                     PrimaryButton("+ Tambah Akun", onTambah)
                     if (pesan != null) HelperText(pesan, color = StatusSuccess)
                     AppTextField(cari, { cari = it }, "Cari nama, email, NIM/NIP")
@@ -152,9 +156,9 @@ fun DaftarAkun(
                     HelperText("${tampil.size} akun · tekan akun untuk mengubah data atau reset kata sandi")
                 }
             }
-            if (tampil.isEmpty()) item { HelperText("Tidak ada akun yang cocok.") }
+            if (tampil.isEmpty()) item { KartuKosong("Tidak ada akun yang cocok.") }
             items(tampil) { a ->
-                ItemCard(onClick = { onAkunClick(a) }) {
+                ItemCard(onClick = { onAkunClick(a) }, inisial = a.nama, warnaInisial = warnaRole(a.role)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ItemTitle(a.nama)
                         ItemSubtitle(a.email)
@@ -210,7 +214,7 @@ fun FormAkun(
     val bisaSimpan = !isLoading && nama.isNotBlank() && emailValid && sandi.length >= 6 && nomorValid
 
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Tambah Akun", "Buat akun baru", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -220,7 +224,7 @@ fun FormAkun(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            SectionCard("Tambah Akun") {
+            SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Peran")
                     SelectField(
@@ -259,7 +263,8 @@ fun FormAkun(
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("nama@student.uns.ac.id") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = BentukField,
+                        colors = warnaField(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                     )
                     if (email.isNotBlank() && !emailValid) ErrorText("Format email tidak valid, contoh: nama@student.uns.ac.id")
@@ -272,7 +277,8 @@ fun FormAkun(
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("minimal 6 karakter") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = BentukField,
+                        colors = warnaField(),
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
@@ -339,14 +345,14 @@ fun EditAkun(
     val bisaSimpan = !isLoading && nama.isNotBlank() && nomorValid && berubah
 
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Edit Akun", akun.nama, username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionCard("Edit Akun") {
+            SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         FieldLabel("Email (untuk login)")
@@ -412,24 +418,24 @@ fun DaftarMatkulAdmin(
     pesan: String? = null
 ) {
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Mata Kuliah", "Kelola mata kuliah", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Mata Kuliah") {
+                SectionCard {
                     PrimaryButton("+ Tambah Mata Kuliah", onTambah)
                     if (pesan != null) HelperText(pesan, color = StatusSuccess)
                     HelperText("Pilih mata kuliah untuk mengubah dosen, ruangan, atau peserta.")
                 }
             }
-            if (matkul.isEmpty()) item { HelperText("Belum ada mata kuliah.") }
+            if (matkul.isEmpty()) item { KartuKosong("Belum ada mata kuliah.") }
             items(matkul) { m ->
-                ItemCard(onClick = { onMatkulClick(m) }) {
+                ItemCard(onClick = { onMatkulClick(m) }, inisial = m.kode) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ItemTitle(m.judul)
                         ItemSubtitle(m.dosen)
@@ -476,7 +482,7 @@ fun FormMatkulAdmin(
     val bisaSimpan = !isLoading && kode.isNotBlank() && nama.isNotBlank() && dosenId != null && ruanganId != null && !kodeDipakai
 
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman(judul, "Isi data mata kuliah", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -487,7 +493,7 @@ fun FormMatkulAdmin(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            SectionCard(judul) {
+            SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Kode Mata Kuliah")
                     AppTextField(kode, { kode = it }, "contoh: WMC-A")
@@ -561,32 +567,32 @@ fun DaftarRuangan(
     onProfileClick: () -> Unit
 ) {
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Ruangan", "Data ruangan hasil kalibrasi", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Ruangan") {
+                SectionCard {
                     HelperText(
                         "Ruangan dibuat dari hasil kalibrasi fingerprint, jadi tidak ditambah dari aplikasi. " +
                             "Data diubah lewat Firebase Console (koleksi rooms)."
                     )
                 }
             }
-            if (ruangan.isEmpty()) item { HelperText("Belum ada data ruangan.") }
+            if (ruangan.isEmpty()) item { KartuKosong("Belum ada data ruangan.") }
             items(ruangan) { r ->
-                ItemCard {
+                ItemCard(inisial = r.nama) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         ItemTitle(r.nama)
                         ItemSubtitle(r.lokasi)
                         ItemSubtitle("AP utama: ${r.apUtama}")
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text(r.id, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.6f), textAlign = TextAlign.End)
+                    Text(r.id, fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.End)
                 }
             }
         }

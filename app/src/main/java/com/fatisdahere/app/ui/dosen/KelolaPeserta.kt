@@ -62,17 +62,16 @@ fun KelolaPeserta(
 
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Kelola Peserta", matkul.judul, username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Kelola Peserta") {
-                    Text(matkul.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                SectionCard {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -86,14 +85,7 @@ fun KelolaPeserta(
                             placeholder = "Cari NIM atau nama",
                             modifier = Modifier.weight(1f)
                         )
-                        Button(
-                            onClick = { tambahPeserta() },
-                            modifier = Modifier.height(56.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = UnsBlue)
-                        ) {
-                            Text("Tambah", fontWeight = FontWeight.Bold)
-                        }
+                        TombolMini("Tambah", { tambahPeserta() }, Modifier.height(56.dp))
                     }
                     pesan?.let { (teks, error) ->
                         if (error) ErrorText(teks) else HelperText(teks, color = StatusSuccess)
@@ -107,7 +99,7 @@ fun KelolaPeserta(
                 }
             }
             if (tampil.isEmpty()) item {
-                HelperText(if (q.isEmpty()) "Belum ada peserta." else "Tidak ada peserta yang cocok.")
+                KartuKosong(if (q.isEmpty()) "Belum ada peserta." else "Tidak ada peserta yang cocok.")
             }
             items(tampil) { p -> KartuPeserta(p) { hapusTarget = p } }
         }
@@ -129,21 +121,13 @@ fun KelolaPeserta(
 
 @Composable
 private fun KartuPeserta(p: Peserta, onHapus: () -> Unit) {
-    ItemCard {
+    ItemCard(inisial = p.nama) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(p.nama)
             ItemSubtitle(p.nim)
         }
         Spacer(Modifier.width(12.dp))
-        OutlinedButton(
-            onClick = onHapus,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, StatusDanger),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusDanger)
-        ) {
-            Text("Hapus", fontWeight = FontWeight.Bold)
-        }
+        TombolMini("Hapus", onHapus, warna = StatusDanger, terisi = false)
     }
 }
 

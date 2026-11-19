@@ -36,7 +36,20 @@ fun DetailMatkul(
     Scaffold(
         modifier,
         topBar = {
-            FatisdaTopBar(username, onProfileClick, onBack)
+            HeaderGradien(
+                judul = matkul.nama,
+                subjudul = "${matkul.kode} · ${matkul.ruang}",
+                onBack = onBack,
+                userName = username,
+                onUserClick = onProfileClick
+            ) {
+                StatistikHeader(
+                    listOf(
+                        "${matkul.jumlahPeserta}" to "Peserta",
+                        "${riwayat.size}" to "Pertemuan"
+                    )
+                )
+            }
         },
         containerColor = PageBackground
     ) { padding ->
@@ -44,30 +57,11 @@ fun DetailMatkul(
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
             item {
                 SectionCard {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            matkul.judul,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = UnsNavy
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        InfoRow("Ruang", matkul.ruang)
-                        InfoRow(
-                            "Peserta",
-                            "${matkul.jumlahPeserta} mahasiswa"
-                        )
-                    }
-
                     PrimaryButton(
                         statusSesi ?: "Buka Sesi Absen",
                         onBukaSesi,
@@ -103,7 +97,7 @@ fun DetailMatkul(
 
             if (riwayat.isEmpty()) {
                 item {
-                    HelperText("Belum ada pertemuan.")
+                    KartuKosong("Belum ada pertemuan.")
                 }
             }
 
@@ -116,7 +110,7 @@ fun DetailMatkul(
 
 @Composable
 private fun KartuPertemuan(p: Pertemuan) {
-    ItemCard {
+    ItemCard(inisial = "P${p.nomor}") {
         Column(
             Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(4.dp)

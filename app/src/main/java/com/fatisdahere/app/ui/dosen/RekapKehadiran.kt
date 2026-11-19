@@ -80,23 +80,20 @@ fun RekapKehadiran(
 
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Rekap Kehadiran", matkul.judul, username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Rekap Kehadiran") {
-                    Text(matkul.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
-                    PilihanTab(
-                        opsi = listOf("Per Pertemuan", "Per Mahasiswa"),
-                        terpilih = if (perMahasiswa) 1 else 0,
-                        onPilih = { perMahasiswa = it == 1 }
-                    )
-                }
+                TabPil(
+                    opsi = listOf("Per Pertemuan", "Per Mahasiswa"),
+                    terpilih = if (perMahasiswa) 1 else 0,
+                    onPilih = { perMahasiswa = it == 1 }
+                )
             }
             if (perMahasiswa) {
                 if (buatCsv != null) item {
@@ -126,19 +123,7 @@ fun RekapKehadiran(
                     val ringkasan = PilihanStatus + listOfNotNull(
                         AttendanceStatus.BelumAbsen.takeIf { s -> catatan.any { it.status == s } }
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        ringkasan.forEach { s ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "${catatan.count { it.status == s }}",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = readableColor(s.color)
-                                )
-                                Text(s.label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f))
-                            }
-                        }
-                    }
+                    StatistikBaris(ringkasan.map { st -> ItemStat("${catatan.count { it.status == st }}", st.label, st.color) })
                 }
             }
             if (pertemuan != null) {
@@ -146,7 +131,7 @@ fun RekapKehadiran(
                 if (pertemuan.terjadwal) item {
                     HelperText("Pertemuan ini belum dimulai, jadi status kehadiran belum bisa diubah.")
                 }
-                if (catatan.isEmpty()) item { HelperText("Belum ada peserta.") }
+                if (catatan.isEmpty()) item { KartuKosong("Belum ada peserta.") }
                 items(catatan) { c ->
                     KartuCatatan(
                         c,
@@ -191,7 +176,7 @@ private fun KartuCatatan(
     onLihat: () -> Unit,
     bisaDiubah: Boolean = true
 ) {
-    ItemCard {
+    ItemCard(inisial = c.nama, warnaInisial = readableColor(c.status.color)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(c.nama)
             ItemSubtitle("${c.nim} · ${if (c.manual) "manual" else "auto"}")
@@ -206,7 +191,7 @@ private fun KartuCatatan(
 private fun androidx.compose.foundation.lazy.LazyListScope.isiPerMahasiswa(rekap: List<RekapMahasiswa>) {
     val totalPertemuan = rekap.maxOfOrNull { it.total } ?: 0
     if (rekap.isEmpty() || totalPertemuan == 0) {
-        item { HelperText("Belum ada pertemuan yang selesai, jadi rekap per mahasiswa belum tersedia.") }
+        item { KartuKosong("Belum ada pertemuan yang selesai, jadi rekap per mahasiswa belum tersedia.") }
         return
     }
     val rataRata = rekap.map { it.persenHadir }.average().let { Math.round(it) }
@@ -232,10 +217,11 @@ private fun KartuRekapMahasiswa(r: RekapMahasiswa) {
         r.persenHadir >= 50 -> StatusWarning
         else -> StatusDanger
     }
-    ItemCard {
+    ItemCard(inisial = r.nama, warnaInisial = readableColor(warna)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ItemTitle(r.nama)
             ItemSubtitle("${r.nim} · Hadir ${r.hadir} dari ${r.total}")
+            BatangProgres(r.persenHadir, warna)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatusPill("I ${r.izin}", AttendanceStatus.Izin.color)
                 StatusPill("S ${r.sakit}", AttendanceStatus.Sakit.color)
@@ -247,43 +233,15 @@ private fun KartuRekapMahasiswa(r: RekapMahasiswa) {
     }
 }
 
-/** Dua/lebih pilihan berjajar untuk berpindah tampilan. */
-@Composable
-private fun PilihanTab(opsi: List<String>, terpilih: Int, onPilih: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        opsi.forEachIndexed { i, teks ->
-            val aktif = i == terpilih
-            Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onPilih(i) },
-                shape = RoundedCornerShape(10.dp),
-                color = if (aktif) UnsBlue else UnsBlue.copy(alpha = 0.08f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        teks,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (aktif) androidx.compose.ui.graphics.Color.White else UnsBlue
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun PilihStatus(status: AttendanceStatus, onPilih: (AttendanceStatus) -> Unit) {
     var terbuka by remember { mutableStateOf(false) }
     Box {
         Surface(
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
+                .clip(BentukPil)
                 .clickable { terbuka = true },
-            shape = RoundedCornerShape(50),
+            shape = BentukPil,
             color = status.color.copy(alpha = 0.15f)
         ) {
             Row(

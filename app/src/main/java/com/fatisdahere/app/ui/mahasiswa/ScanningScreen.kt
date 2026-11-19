@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -137,80 +138,90 @@ fun ScanningScreen(
     }
 
     Scaffold(
-        topBar = { FatisdaTopBar(userName, onProfileClick, onBack) },
+        topBar = {
+            HeaderGradien(
+                judul = "Absensi",
+                subjudul = session.title,
+                onBack = onBack,
+                userName = userName,
+                onUserClick = onProfileClick
+            )
+        },
         containerColor = PageBackground
     ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SectionCard("Absensi") {
-                LiveBadge()
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(session.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
-                    Spacer(Modifier.height(4.dp))
-                    InfoRow("Waktu", session.time)
-                    InfoRow("Ruang", session.room)
-                }
-                Text(
-                    "Keterangan: ${selectedStatus?.label ?: "Belum dipilih"}",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(AttendanceStatus.Hadir, AttendanceStatus.Sakit, AttendanceStatus.Izin).forEach { status ->
-                        PilihanKeterangan(
-                            label = status.label,
-                            selected = selectedStatus == status,
+        when (proses) {
+            is ProsesAbsen.Memindai -> TampilanScan(
+                padding, session, wifiName, "Memindai lokasi…", proses.selesai, proses.total, true
+            )
+            ProsesAbsen.Memproses -> TampilanScan(
+                padding, session, wifiName, "Memproses absen…", 1, 1, false
+            )
+            ProsesAbsen.Siap -> Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SectionCard {
+                    LiveBadge()
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(session.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                        Spacer(Modifier.height(4.dp))
+                        InfoRow("Waktu", session.time)
+                        InfoRow("Ruang", session.room)
+                    }
+                    Text(
+                        "Keterangan: ${selectedStatus?.label ?: "Belum dipilih"}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(AttendanceStatus.Hadir, AttendanceStatus.Sakit, AttendanceStatus.Izin).forEach { status ->
+                            PilihanKeterangan(
+                                label = status.label,
+                                selected = selectedStatus == status,
+                                enabled = !sibuk,
+                                onClick = {
+                                    selectedStatus = status
+                                    galat = null
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    if (selectedStatus == AttendanceStatus.Hadir) {
+                        HelperText("Pastikan kamu sudah di dalam ruangan ${session.room}, lalu diam di tempat selama scan.")
+                    }
+                    if (perluBukti) {
+                        IsianIzin(
+                            catatan = catatan,
+                            onCatatanChange = { catatan = it.take(CATATAN_MAKS) },
+                            catatanCukup = catatanCukup,
+                            fotoBase64 = fotoBase64,
+                            fotoPratinjau = fotoPratinjau,
+                            memprosesFoto = memprosesFoto,
+                            galatFoto = galatFoto,
                             enabled = !sibuk,
-                            onClick = {
-                                selectedStatus = status
-                                galat = null
-                            },
-                            modifier = Modifier.weight(1f)
+                            onPilihFoto = { pilihFoto.launch("image/*") }
                         )
                     }
-                }
-                if (selectedStatus == AttendanceStatus.Hadir) {
-                    HelperText("Pastikan kamu sudah di dalam ruangan ${session.room}, lalu diam di tempat selama scan.")
-                }
-                if (perluBukti) {
-                    IsianIzin(
-                        catatan = catatan,
-                        onCatatanChange = { catatan = it.take(CATATAN_MAKS) },
-                        catatanCukup = catatanCukup,
-                        fotoBase64 = fotoBase64,
-                        fotoPratinjau = fotoPratinjau,
-                        memprosesFoto = memprosesFoto,
-                        galatFoto = galatFoto,
-                        enabled = !sibuk,
-                        onPilihFoto = { pilihFoto.launch("image/*") }
+                    PrimaryButton(
+                        if (perluBukti) "Kirim Keterangan" else "Verifikasi Kehadiran",
+                        onClick = {
+                            val status = selectedStatus ?: return@PrimaryButton
+                            when {
+                                perluBukti -> konfirmasi = true
+                                !hasLocationPermission(context) -> izinLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                else -> kirimJikaSiap(status)
+                            }
+                        },
+                        enabled = selectedStatus != null && isianLengkap && !sibuk && !memprosesFoto
                     )
+                    galat?.let { ErrorText(it) }
                 }
-                PrimaryButton(
-                    if (perluBukti) "Kirim Keterangan" else "Verifikasi Kehadiran",
-                    onClick = {
-                        val status = selectedStatus ?: return@PrimaryButton
-                        when {
-                            perluBukti -> konfirmasi = true
-                            !hasLocationPermission(context) -> izinLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                            else -> kirimJikaSiap(status)
-                        }
-                    },
-                    enabled = selectedStatus != null && isianLengkap && !sibuk && !memprosesFoto
-                )
-                galat?.let { ErrorText(it) }
-            }
-
-            when (proses) {
-                is ProsesAbsen.Memindai -> ProgresScan(wifiName, proses)
-                ProsesAbsen.Memproses -> ProgresMemproses()
-                ProsesAbsen.Siap -> Unit
             }
         }
     }
@@ -254,7 +265,8 @@ private fun IsianIzin(
             placeholder = { Text("contoh: Demam sejak semalam, sudah ke dokter") },
             singleLine = false,
             maxLines = 5,
-            shape = RoundedCornerShape(12.dp)
+            shape = BentukField,
+            colors = warnaField()
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             if (catatan.isNotEmpty() && !catatanCukup) {
@@ -294,57 +306,41 @@ private fun IsianIzin(
 }
 
 @Composable
-private fun ProgresScan(wifiName: String, proses: ProsesAbsen.Memindai) {
-    SectionCard {
+private fun TampilanScan(
+    padding: PaddingValues,
+    session: SessionUi,
+    wifiName: String,
+    judul: String,
+    selesai: Int,
+    total: Int,
+    tampilLangkah: Boolean
+) {
+    Column(
+        Modifier.fillMaxSize().padding(padding).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Column(
-            Modifier.fillMaxWidth(),
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(GradienUtama)
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.SpaceEvenly
         ) {
-            Text(
-                "Scanning Wi-Fi ($wifiName)",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = UnsNavy,
-                textAlign = TextAlign.Center
-            )
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
-                CircularProgressIndicator(
-                    progress = proses.selesai.toFloat() / proses.total,
-                    modifier = Modifier.fillMaxSize(),
-                    color = UnsBlue,
-                    trackColor = PageBackground,
-                    strokeWidth = 12.dp
-                )
-                Text(
-                    "${proses.selesai} dari ${proses.total}",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = UnsNavy
-                )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(judul, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Tetap diam di dalam ruangan", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
             }
-            Text(
-                "Tetap diam di dalam ruangan. Proses ini bisa memakan waktu hingga 30 detik.",
-                fontSize = 14.sp,
-                color = TextPrimary,
-                textAlign = TextAlign.Center
-            )
+            RadarPemindai(selesai, total)
+            if (tampilLangkah) LangkahScan(selesai, total) else Spacer(Modifier.height(40.dp))
         }
-    }
-}
-
-/** Tanpa CircularProgressIndicator berputar: crash di proyek ini (lihat catatan di LoadingContent). */
-@Composable
-private fun ProgresMemproses() {
-    SectionCard {
-        Text(
-            "Memproses absen...",
-            Modifier.fillMaxWidth(),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
-            color = UnsBlue,
-            textAlign = TextAlign.Center
-        )
+        SectionCard {
+            Text(session.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = UnsNavy)
+            HelperText("Ruang ${session.room} · Wi-Fi $wifiName")
+            HelperText("Proses ini bisa memakan waktu hingga 30 detik.")
+        }
     }
 }
 
@@ -359,11 +355,11 @@ private fun PilihanKeterangan(
     Surface(
         modifier = modifier
             .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(BentukPil)
             .clickable(enabled = enabled, onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = BentukPil,
         color = if (selected) UnsBlue else SurfaceWhite,
-        border = BorderStroke(1.dp, if (selected) UnsBlue else TextPrimary.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, if (selected) UnsBlue else TextMuted.copy(alpha = 0.45f))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(label, color = if (selected) Color.White else TextPrimary, fontWeight = FontWeight.Bold)
