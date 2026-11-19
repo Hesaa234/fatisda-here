@@ -126,287 +126,292 @@ fun AdminApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
     val nimTerpakai = d.users.mapNotNull { it.nim }
     val nipTerpakai = d.users.mapNotNull { it.nip }
 
-    when {
-        layar == LayarAdmin.PROFIL -> Scaffold(
-            topBar = { FatisdaTopBar(user.name, onBack = keBeranda) },
-            containerColor = PageBackground
-        ) { padding ->
-            ProfileContent(
-                fields = listOf("Nama" to user.name, "Email" to user.email, "Peran" to "Admin"),
-                onLogoutClick = onLogout,
-                padding = padding
-            )
-        }
-
-        layar == LayarAdmin.AKUN -> DaftarAkun(
-            username = user.name,
-            akun = d.users.map {
-                AkunUi(it.uid, it.name, it.email, it.role, if (it.role == Role.MAHASISWA) it.nim else it.nip)
-            },
-            onTambah = {
-                simpanAkunGalat = null
-                pesanAkun = null
-                layar = LayarAdmin.TAMBAH_AKUN
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil,
-            pesan = pesanAkun,
-            onAkunClick = {
-                akunIdTerpilih = it.uid
-                editAkunGalat = null
-                editAkunPesan = null
-                layar = LayarAdmin.EDIT_AKUN
+    TransisiLayar(
+        target = layar,
+        kedalaman = { when (it) { LayarAdmin.BERANDA -> 0; LayarAdmin.TAMBAH_AKUN, LayarAdmin.EDIT_AKUN, LayarAdmin.TAMBAH_MATKUL, LayarAdmin.EDIT_MATKUL -> 2; LayarAdmin.PESERTA -> 3; else -> 1 } }
+    ) { tujuan ->
+        when {
+            tujuan == LayarAdmin.PROFIL -> Scaffold(
+                topBar = { HeaderGradien(judul = "Profil", subjudul = user.name, onBack = keBeranda) },
+                containerColor = PageBackground
+            ) { padding ->
+                ProfileContent(
+                    fields = listOf("Nama" to user.name, "Email" to user.email, "Peran" to "Admin"),
+                    onLogoutClick = onLogout,
+                    padding = padding
+                )
             }
-        )
 
-        layar == LayarAdmin.EDIT_AKUN && akunIdTerpilih?.let { d.usersById[it] } != null -> {
-            val target = d.usersById.getValue(akunIdTerpilih!!)
-            val akunUi = AkunUi(
-                target.uid, target.name, target.email, target.role,
-                if (target.role == Role.MAHASISWA) target.nim else target.nip
-            )
-            EditAkun(
+            tujuan == LayarAdmin.AKUN -> DaftarAkun(
                 username = user.name,
-                akun = akunUi,
-                nomorTerpakai = if (target.role == Role.MAHASISWA) nimTerpakai else nipTerpakai,
-                isLoading = editAkunLoading,
-                errorMessage = editAkunGalat,
-                pesan = editAkunPesan,
-                onSimpan = { namaBaru, nomorBaru ->
-                    scope.launch {
-                        editAkunLoading = true
-                        editAkunGalat = null
-                        editAkunPesan = null
-                        try {
-                            container.userRepository.updateUser(
-                                target.copy(
-                                    name = namaBaru,
-                                    nim = if (target.role == Role.MAHASISWA) nomorBaru else target.nim,
-                                    nip = if (target.role == Role.DOSEN) nomorBaru else target.nip
+                akun = d.users.map {
+                    AkunUi(it.uid, it.name, it.email, it.role, if (it.role == Role.MAHASISWA) it.nim else it.nip)
+                },
+                onTambah = {
+                    simpanAkunGalat = null
+                    pesanAkun = null
+                    layar = LayarAdmin.TAMBAH_AKUN
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil,
+                pesan = pesanAkun,
+                onAkunClick = {
+                    akunIdTerpilih = it.uid
+                    editAkunGalat = null
+                    editAkunPesan = null
+                    layar = LayarAdmin.EDIT_AKUN
+                }
+            )
+
+            tujuan == LayarAdmin.EDIT_AKUN && akunIdTerpilih?.let { d.usersById[it] } != null -> {
+                val target = d.usersById.getValue(akunIdTerpilih!!)
+                val akunUi = AkunUi(
+                    target.uid, target.name, target.email, target.role,
+                    if (target.role == Role.MAHASISWA) target.nim else target.nip
+                )
+                EditAkun(
+                    username = user.name,
+                    akun = akunUi,
+                    nomorTerpakai = if (target.role == Role.MAHASISWA) nimTerpakai else nipTerpakai,
+                    isLoading = editAkunLoading,
+                    errorMessage = editAkunGalat,
+                    pesan = editAkunPesan,
+                    onSimpan = { namaBaru, nomorBaru ->
+                        scope.launch {
+                            editAkunLoading = true
+                            editAkunGalat = null
+                            editAkunPesan = null
+                            try {
+                                container.userRepository.updateUser(
+                                    target.copy(
+                                        name = namaBaru,
+                                        nim = if (target.role == Role.MAHASISWA) nomorBaru else target.nim,
+                                        nip = if (target.role == Role.DOSEN) nomorBaru else target.nip
+                                    )
                                 )
+                                pesanAkun = "Akun $namaBaru berhasil diperbarui."
+                                layar = LayarAdmin.AKUN
+                                versi++
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                editAkunGalat = pesanGalat(e)
+                            }
+                            editAkunLoading = false
+                        }
+                    },
+                    onKirimResetSandi = {
+                        scope.launch {
+                            editAkunLoading = true
+                            editAkunGalat = null
+                            editAkunPesan = null
+                            container.authRepository.sendPasswordReset(target.email)
+                                .onSuccess { editAkunPesan = "Email reset kata sandi terkirim ke ${target.email}." }
+                                .onFailure { editAkunGalat = pesanGalat(it) }
+                            editAkunLoading = false
+                        }
+                    },
+                    onBack = { layar = LayarAdmin.AKUN },
+                    onProfileClick = keProfil
+                )
+            }
+
+            tujuan == LayarAdmin.TAMBAH_AKUN -> FormAkun(
+                username = user.name,
+                isLoading = simpanAkunLoading,
+                errorMessage = simpanAkunGalat,
+                onSimpan = { akun ->
+                    scope.launch {
+                        simpanAkunLoading = true
+                        simpanAkunGalat = null
+                        try {
+                            container.userRepository.createAccount(akun)
+                                .onSuccess {
+                                    pesanAkun = "Akun ${it.name} (${it.email}) berhasil dibuat."
+                                    layar = LayarAdmin.AKUN
+                                    versi++
+                                }
+                                .onFailure { simpanAkunGalat = pesanGalat(it) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            simpanAkunGalat = pesanGalat(e)
+                        }
+                        simpanAkunLoading = false
+                    }
+                },
+                onBack = { layar = LayarAdmin.AKUN },
+                onProfileClick = keProfil,
+                nimTerpakai = nimTerpakai,
+                nipTerpakai = nipTerpakai
+            )
+
+            tujuan == LayarAdmin.MATKUL -> DaftarMatkulAdmin(
+                username = user.name,
+                matkul = d.courses.map {
+                    MatkulAdminUi(it.id, it.code, it.name, d.namaUser(it.lecturerId), d.namaRuang(it.roomId), it.studentIds.size)
+                },
+                onTambah = {
+                    simpanMatkulGalat = null
+                    pesanMatkul = null
+                    layar = LayarAdmin.TAMBAH_MATKUL
+                },
+                onMatkulClick = {
+                    simpanMatkulGalat = null
+                    pesanMatkul = null
+                    courseIdTerpilih = it.id
+                    layar = LayarAdmin.EDIT_MATKUL
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil,
+                pesan = pesanMatkul
+            )
+
+            tujuan == LayarAdmin.TAMBAH_MATKUL -> FormMatkulAdmin(
+                username = user.name,
+                judul = "Tambah Mata Kuliah",
+                daftarDosen = daftarDosen,
+                daftarRuangan = daftarRuangan,
+                kodeTerpakai = d.courses.map { it.code },
+                isLoading = simpanMatkulLoading,
+                errorMessage = simpanMatkulGalat,
+                onSimpan = { kode, nama, dosenId, ruanganId ->
+                    scope.launch {
+                        simpanMatkulLoading = true
+                        simpanMatkulGalat = null
+                        try {
+                            container.courseRepository.addCourse(
+                                Course(id = "", code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId, studentIds = emptyList())
                             )
-                            pesanAkun = "Akun $namaBaru berhasil diperbarui."
-                            layar = LayarAdmin.AKUN
+                            pesanMatkul = "Mata kuliah ($kode) $nama berhasil ditambahkan."
+                            layar = LayarAdmin.MATKUL
                             versi++
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            editAkunGalat = pesanGalat(e)
+                            simpanMatkulGalat = pesanGalat(e)
                         }
-                        editAkunLoading = false
+                        simpanMatkulLoading = false
                     }
                 },
-                onKirimResetSandi = {
-                    scope.launch {
-                        editAkunLoading = true
-                        editAkunGalat = null
-                        editAkunPesan = null
-                        container.authRepository.sendPasswordReset(target.email)
-                            .onSuccess { editAkunPesan = "Email reset kata sandi terkirim ke ${target.email}." }
-                            .onFailure { editAkunGalat = pesanGalat(it) }
-                        editAkunLoading = false
-                    }
-                },
-                onBack = { layar = LayarAdmin.AKUN },
+                onBack = { layar = LayarAdmin.MATKUL },
                 onProfileClick = keProfil
             )
-        }
 
-        layar == LayarAdmin.TAMBAH_AKUN -> FormAkun(
-            username = user.name,
-            isLoading = simpanAkunLoading,
-            errorMessage = simpanAkunGalat,
-            onSimpan = { akun ->
-                scope.launch {
-                    simpanAkunLoading = true
-                    simpanAkunGalat = null
-                    try {
-                        container.userRepository.createAccount(akun)
-                            .onSuccess {
-                                pesanAkun = "Akun ${it.name} (${it.email}) berhasil dibuat."
-                                layar = LayarAdmin.AKUN
-                                versi++
-                            }
-                            .onFailure { simpanAkunGalat = pesanGalat(it) }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        simpanAkunGalat = pesanGalat(e)
-                    }
-                    simpanAkunLoading = false
-                }
-            },
-            onBack = { layar = LayarAdmin.AKUN },
-            onProfileClick = keProfil,
-            nimTerpakai = nimTerpakai,
-            nipTerpakai = nipTerpakai
-        )
-
-        layar == LayarAdmin.MATKUL -> DaftarMatkulAdmin(
-            username = user.name,
-            matkul = d.courses.map {
-                MatkulAdminUi(it.id, it.code, it.name, d.namaUser(it.lecturerId), d.namaRuang(it.roomId), it.studentIds.size)
-            },
-            onTambah = {
-                simpanMatkulGalat = null
-                pesanMatkul = null
-                layar = LayarAdmin.TAMBAH_MATKUL
-            },
-            onMatkulClick = {
-                simpanMatkulGalat = null
-                pesanMatkul = null
-                courseIdTerpilih = it.id
-                layar = LayarAdmin.EDIT_MATKUL
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil,
-            pesan = pesanMatkul
-        )
-
-        layar == LayarAdmin.TAMBAH_MATKUL -> FormMatkulAdmin(
-            username = user.name,
-            judul = "Tambah Mata Kuliah",
-            daftarDosen = daftarDosen,
-            daftarRuangan = daftarRuangan,
-            kodeTerpakai = d.courses.map { it.code },
-            isLoading = simpanMatkulLoading,
-            errorMessage = simpanMatkulGalat,
-            onSimpan = { kode, nama, dosenId, ruanganId ->
-                scope.launch {
-                    simpanMatkulLoading = true
-                    simpanMatkulGalat = null
-                    try {
-                        container.courseRepository.addCourse(
-                            Course(id = "", code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId, studentIds = emptyList())
-                        )
-                        pesanMatkul = "Mata kuliah ($kode) $nama berhasil ditambahkan."
-                        layar = LayarAdmin.MATKUL
-                        versi++
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        simpanMatkulGalat = pesanGalat(e)
-                    }
-                    simpanMatkulLoading = false
-                }
-            },
-            onBack = { layar = LayarAdmin.MATKUL },
-            onProfileClick = keProfil
-        )
-
-        layar == LayarAdmin.EDIT_MATKUL && course != null -> FormMatkulAdmin(
-            username = user.name,
-            judul = "Edit Mata Kuliah",
-            daftarDosen = daftarDosen,
-            daftarRuangan = daftarRuangan,
-            kodeTerpakai = d.courses.filter { it.id != course.id }.map { it.code },
-            kodeAwal = course.code,
-            namaAwal = course.name,
-            dosenAwal = course.lecturerId,
-            ruanganAwal = course.roomId,
-            isLoading = simpanMatkulLoading,
-            errorMessage = simpanMatkulGalat,
-            onSimpan = { kode, nama, dosenId, ruanganId ->
-                scope.launch {
-                    simpanMatkulLoading = true
-                    simpanMatkulGalat = null
-                    try {
-                        container.courseRepository.updateCourse(
-                            course.copy(code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId)
-                        )
-                        pesanMatkul = "Mata kuliah ($kode) $nama berhasil diperbarui."
-                        layar = LayarAdmin.MATKUL
-                        versi++
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        simpanMatkulGalat = pesanGalat(e)
-                    }
-                    simpanMatkulLoading = false
-                }
-            },
-            onKelolaPeserta = { layar = LayarAdmin.PESERTA },
-            onHapus = {
-                scope.launch {
-                    simpanMatkulLoading = true
-                    simpanMatkulGalat = null
-                    try {
-                        container.courseRepository.deleteCourse(course.id)
-                        pesanMatkul = "Mata kuliah (${course.code}) ${course.name} berhasil dihapus."
-                        courseIdTerpilih = null
-                        layar = LayarAdmin.MATKUL
-                        versi++
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        simpanMatkulGalat = pesanGalat(e)
-                    }
-                    simpanMatkulLoading = false
-                }
-            },
-            onBack = { layar = LayarAdmin.MATKUL },
-            onProfileClick = keProfil
-        )
-
-        layar == LayarAdmin.PESERTA && course != null -> {
-            val semuaMahasiswa = d.users.filter { it.role == Role.MAHASISWA }
-            KelolaPeserta(
+            tujuan == LayarAdmin.EDIT_MATKUL && course != null -> FormMatkulAdmin(
                 username = user.name,
-                matkul = MataKuliah(course.code, course.name, d.namaRuang(course.roomId), course.studentIds.size, course.id),
-                peserta = course.studentIds.mapNotNull { d.usersById[it] }.map { Peserta(it.name, it.nim ?: "-", it.uid) },
-                daftarMahasiswa = semuaMahasiswa.map { Peserta(it.name, it.nim ?: "-", it.uid) },
-                onTambah = { p -> ubah { container.courseRepository.addStudent(course.id, p.uid) } },
-                onHapus = { p -> ubah { container.courseRepository.removeStudent(course.id, p.uid) } },
-                onBack = { layar = LayarAdmin.EDIT_MATKUL },
+                judul = "Edit Mata Kuliah",
+                daftarDosen = daftarDosen,
+                daftarRuangan = daftarRuangan,
+                kodeTerpakai = d.courses.filter { it.id != course.id }.map { it.code },
+                kodeAwal = course.code,
+                namaAwal = course.name,
+                dosenAwal = course.lecturerId,
+                ruanganAwal = course.roomId,
+                isLoading = simpanMatkulLoading,
+                errorMessage = simpanMatkulGalat,
+                onSimpan = { kode, nama, dosenId, ruanganId ->
+                    scope.launch {
+                        simpanMatkulLoading = true
+                        simpanMatkulGalat = null
+                        try {
+                            container.courseRepository.updateCourse(
+                                course.copy(code = kode, name = nama, lecturerId = dosenId, roomId = ruanganId)
+                            )
+                            pesanMatkul = "Mata kuliah ($kode) $nama berhasil diperbarui."
+                            layar = LayarAdmin.MATKUL
+                            versi++
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            simpanMatkulGalat = pesanGalat(e)
+                        }
+                        simpanMatkulLoading = false
+                    }
+                },
+                onKelolaPeserta = { layar = LayarAdmin.PESERTA },
+                onHapus = {
+                    scope.launch {
+                        simpanMatkulLoading = true
+                        simpanMatkulGalat = null
+                        try {
+                            container.courseRepository.deleteCourse(course.id)
+                            pesanMatkul = "Mata kuliah (${course.code}) ${course.name} berhasil dihapus."
+                            courseIdTerpilih = null
+                            layar = LayarAdmin.MATKUL
+                            versi++
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            simpanMatkulGalat = pesanGalat(e)
+                        }
+                        simpanMatkulLoading = false
+                    }
+                },
+                onBack = { layar = LayarAdmin.MATKUL },
                 onProfileClick = keProfil
             )
+
+            tujuan == LayarAdmin.PESERTA && course != null -> {
+                val semuaMahasiswa = d.users.filter { it.role == Role.MAHASISWA }
+                KelolaPeserta(
+                    username = user.name,
+                    matkul = MataKuliah(course.code, course.name, d.namaRuang(course.roomId), course.studentIds.size, course.id),
+                    peserta = course.studentIds.mapNotNull { d.usersById[it] }.map { Peserta(it.name, it.nim ?: "-", it.uid) },
+                    daftarMahasiswa = semuaMahasiswa.map { Peserta(it.name, it.nim ?: "-", it.uid) },
+                    onTambah = { p -> ubah { container.courseRepository.addStudent(course.id, p.uid) } },
+                    onHapus = { p -> ubah { container.courseRepository.removeStudent(course.id, p.uid) } },
+                    onBack = { layar = LayarAdmin.EDIT_MATKUL },
+                    onProfileClick = keProfil
+                )
+            }
+
+            tujuan == LayarAdmin.TES_KNN -> TesKnnScreen(
+                username = user.name,
+                userId = user.uid,
+                fingerprint = container.fingerprint,
+                defaultParams = container.positioningParams,
+                kalibrasi = container.kalibrasiLokal,
+                scanner = container.wifiScanner,
+                motionTracker = container.motionTracker,
+                repository = container.kalibrasiRepository,
+                sumberParameter = container.sumberParameter,
+                muatParameter = { container.muatParameterKnn() },
+                simpanUntukSemua = { roomId, rssiMin, distanceMax ->
+                    container.simpanParameterRuangan(roomId, rssiMin, distanceMax)
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil
+            )
+
+            tujuan == LayarAdmin.RUANGAN -> DaftarRuangan(
+                username = user.name,
+                ruangan = d.rooms.map {
+                    val lokasi = listOf(it.building, if (it.floor > 0) "Lantai ${it.floor}" else "")
+                        .filter { s -> s.isNotBlank() }.joinToString(" · ").ifEmpty { "-" }
+                    RuanganUi(it.id, it.name, lokasi, it.mainApPrefix.ifEmpty { "-" })
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil
+            )
+
+            else -> BerandaAdmin(
+                username = user.name,
+                jumlahAkun = d.users.size,
+                jumlahMatkul = d.courses.size,
+                jumlahRuangan = d.rooms.size,
+                onAkun = {
+                    pesanAkun = null
+                    layar = LayarAdmin.AKUN
+                },
+                onMatkul = {
+                    pesanMatkul = null
+                    layar = LayarAdmin.MATKUL
+                },
+                onRuangan = { layar = LayarAdmin.RUANGAN },
+                onProfileClick = keProfil,
+                onTesKnn = { layar = LayarAdmin.TES_KNN }
+            )
         }
-
-        layar == LayarAdmin.TES_KNN -> TesKnnScreen(
-            username = user.name,
-            userId = user.uid,
-            fingerprint = container.fingerprint,
-            defaultParams = container.positioningParams,
-            kalibrasi = container.kalibrasiLokal,
-            scanner = container.wifiScanner,
-            motionTracker = container.motionTracker,
-            repository = container.kalibrasiRepository,
-            sumberParameter = container.sumberParameter,
-            muatParameter = { container.muatParameterKnn() },
-            simpanUntukSemua = { roomId, rssiMin, distanceMax ->
-                container.simpanParameterRuangan(roomId, rssiMin, distanceMax)
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil
-        )
-
-        layar == LayarAdmin.RUANGAN -> DaftarRuangan(
-            username = user.name,
-            ruangan = d.rooms.map {
-                val lokasi = listOf(it.building, if (it.floor > 0) "Lantai ${it.floor}" else "")
-                    .filter { s -> s.isNotBlank() }.joinToString(" · ").ifEmpty { "-" }
-                RuanganUi(it.id, it.name, lokasi, it.mainApPrefix.ifEmpty { "-" })
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil
-        )
-
-        else -> BerandaAdmin(
-            username = user.name,
-            jumlahAkun = d.users.size,
-            jumlahMatkul = d.courses.size,
-            jumlahRuangan = d.rooms.size,
-            onAkun = {
-                pesanAkun = null
-                layar = LayarAdmin.AKUN
-            },
-            onMatkul = {
-                pesanMatkul = null
-                layar = LayarAdmin.MATKUL
-            },
-            onRuangan = { layar = LayarAdmin.RUANGAN },
-            onProfileClick = keProfil,
-            onTesKnn = { layar = LayarAdmin.TES_KNN }
-        )
     }
 }

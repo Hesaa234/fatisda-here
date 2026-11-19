@@ -37,7 +37,7 @@ fun TambahMatkul(
 
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman(judul, "Isi data mata kuliah", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -47,7 +47,7 @@ fun TambahMatkul(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            SectionCard(judul) {
+            SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Kode Mata Kuliah")
                     AppTextField(kode, { kode = it }, "contoh: WMC-A")

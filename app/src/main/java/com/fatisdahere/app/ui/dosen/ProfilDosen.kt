@@ -4,7 +4,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.fatisdahere.app.ui.components.FatisdaTopBar
+import com.fatisdahere.app.ui.components.HeaderGradien
 import com.fatisdahere.app.ui.components.ProfileContent
 import com.fatisdahere.app.ui.theme.FatisdaTheme
 import com.fatisdahere.app.ui.theme.PageBackground
@@ -19,7 +19,7 @@ fun ProfilDosen(
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(nama, onBack = onBack) },
+        topBar = { HeaderGradien(judul = "Profil", subjudul = nama, onBack = onBack) },
         containerColor = PageBackground
     ) { padding ->
         ProfileContent(

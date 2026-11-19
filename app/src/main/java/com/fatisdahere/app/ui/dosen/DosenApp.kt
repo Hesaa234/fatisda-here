@@ -322,274 +322,279 @@ fun DosenApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         }
     } ?: emptyList()
 
-    when {
+    TransisiLayar(
+        target = layar,
+        kedalaman = { when (it) { LayarDosen.BERANDA -> 0; LayarDosen.PROFIL, LayarDosen.TAMBAH_MATKUL, LayarDosen.DETAIL_MATKUL, LayarDosen.PANTAU_SESI -> 1; else -> 2 } }
+    ) { tujuan ->
+        when {
 
-        layar == LayarDosen.PROFIL -> ProfilDosen(
-            nama = user.name,
-            nip = user.nip ?: "-",
-            onLogout = onLogout,
-            onBack = keBeranda
-        )
+            tujuan == LayarDosen.PROFIL -> ProfilDosen(
+                nama = user.name,
+                nip = user.nip ?: "-",
+                onLogout = onLogout,
+                onBack = keBeranda
+            )
 
-        layar == LayarDosen.PANTAU_SESI &&
-                (sesiDipantau == null || courseDipantau == null || sesiDipantau.closedAtMs != null || now > sesiDipantau.endAtMs) ->
-            SesiBerakhir(
+            tujuan == LayarDosen.PANTAU_SESI &&
+                    (sesiDipantau == null || courseDipantau == null || sesiDipantau.closedAtMs != null || now > sesiDipantau.endAtMs) ->
+                SesiBerakhir(
+                    username = user.name,
+                    judul = courseDipantau?.let { "(${it.code}) - ${it.name}" },
+                    onLihatRekap = courseDipantau?.let { c ->
+                        {
+                            courseIdTerpilih = c.id
+                            layar = LayarDosen.REKAP_KEHADIRAN
+                        }
+                    },
+                    onBack = keBeranda,
+                    onProfileClick = keProfil
+                )
+
+            tujuan == LayarDosen.PANTAU_SESI && sesiDipantau != null && courseDipantau != null -> PantauSesi(
                 username = user.name,
-                judul = courseDipantau?.let { "(${it.code}) - ${it.name}" },
-                onLihatRekap = courseDipantau?.let { c ->
-                    {
-                        courseIdTerpilih = c.id
-                        layar = LayarDosen.REKAP_KEHADIRAN
+                sesi = SesiAktif(
+                    kodeMatkul = courseDipantau.code,
+                    namaMatkul = courseDipantau.name,
+                    waktu = formatRentangJam(sesiDipantau.startAtMs, sesiDipantau.endAtMs),
+                    ruang = d.namaRuang(sesiDipantau.roomId),
+                    hadir = d.hadir(sesiDipantau.id),
+                    totalMahasiswa = courseDipantau.studentIds.size,
+                    sessionId = sesiDipantau.id
+                ),
+                diperbarui = waktuMuat?.let { formatJamDetik(it) },
+                daftarKehadiran = d.pesertaDari(courseDipantau).map { u ->
+                    val a = d.kehadiran(sesiDipantau.id, u.uid)
+
+                    KehadiranMahasiswa(
+                        nama = u.name,
+                        nim = u.nim ?: "-",
+                        status = a?.status?.toUi() ?: AttendanceStatus.BelumAbsen,
+                        jam = a?.let { formatJam(it.createdAtMs) },
+                        uid = u.uid,
+                        keterangan = a?.note,
+                        adaBukti = a?.hasProof == true
+                    )
+                },
+                onLihatKeterangan = { m ->
+                    buktiTerbuka = BuktiTerbuka(sesiDipantau.id, m.uid, "${m.status.label} · ${m.nama}", m.keterangan, m.adaBukti)
+                },
+                onTutupSesi = {
+                    ubah {
+                        container.sessionRepository.closeSession(
+                            sesiDipantau.id,
+                            System.currentTimeMillis()
+                        )
                     }
+                    layar = LayarDosen.BERANDA
                 },
                 onBack = keBeranda,
                 onProfileClick = keProfil
             )
 
-        layar == LayarDosen.PANTAU_SESI && sesiDipantau != null && courseDipantau != null -> PantauSesi(
-            username = user.name,
-            sesi = SesiAktif(
-                kodeMatkul = courseDipantau.code,
-                namaMatkul = courseDipantau.name,
-                waktu = formatRentangJam(sesiDipantau.startAtMs, sesiDipantau.endAtMs),
-                ruang = d.namaRuang(sesiDipantau.roomId),
-                hadir = d.hadir(sesiDipantau.id),
-                totalMahasiswa = courseDipantau.studentIds.size,
-                sessionId = sesiDipantau.id
-            ),
-            diperbarui = waktuMuat?.let { formatJamDetik(it) },
-            daftarKehadiran = d.pesertaDari(courseDipantau).map { u ->
-                val a = d.kehadiran(sesiDipantau.id, u.uid)
+            tujuan == LayarDosen.TAMBAH_MATKUL -> TambahMatkul(
+                username = user.name,
+                daftarRuangan = ruanganBisaDipakai.map { it.name },
+                kodeTerpakai = d.courses.map { it.code },
+                onSimpan = { kode, nama, ruangan ->
+                    val roomId = d.rooms.first { it.name == ruangan }.id
 
-                KehadiranMahasiswa(
-                    nama = u.name,
-                    nim = u.nim ?: "-",
-                    status = a?.status?.toUi() ?: AttendanceStatus.BelumAbsen,
-                    jam = a?.let { formatJam(it.createdAtMs) },
-                    uid = u.uid,
-                    keterangan = a?.note,
-                    adaBukti = a?.hasProof == true
-                )
-            },
-            onLihatKeterangan = { m ->
-                buktiTerbuka = BuktiTerbuka(sesiDipantau.id, m.uid, "${m.status.label} · ${m.nama}", m.keterangan, m.adaBukti)
-            },
-            onTutupSesi = {
-                ubah {
-                    container.sessionRepository.closeSession(
-                        sesiDipantau.id,
-                        System.currentTimeMillis()
-                    )
-                }
-                layar = LayarDosen.BERANDA
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil
-        )
+                    ubah {
+                        container.courseRepository.addCourse(
+                            Course(
+                                id = "",
+                                code = kode,
+                                name = nama,
+                                lecturerId = user.uid,
+                                roomId = roomId,
+                                studentIds = emptyList()
+                            )
+                        )
+                    }
 
-        layar == LayarDosen.TAMBAH_MATKUL -> TambahMatkul(
-            username = user.name,
-            daftarRuangan = ruanganBisaDipakai.map { it.name },
-            kodeTerpakai = d.courses.map { it.code },
-            onSimpan = { kode, nama, ruangan ->
-                val roomId = d.rooms.first { it.name == ruangan }.id
+                    layar = LayarDosen.BERANDA
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil
+            )
 
-                ubah {
-                    container.courseRepository.addCourse(
-                        Course(
-                            id = "",
-                            code = kode,
-                            name = nama,
+            tujuan == LayarDosen.DETAIL_MATKUL && matkul != null -> DetailMatkul(
+                username = user.name,
+                matkul = matkul,
+                riwayat = riwayat,
+                statusSesi = statusSesiMatkul,
+                onBukaSesi = {
+                    layar = LayarDosen.BUKA_SESI
+                },
+                onKelolaPeserta = {
+                    layar = LayarDosen.KELOLA_PESERTA
+                },
+                onEditMatkul = {
+                    layar = LayarDosen.EDIT_MATKUL
+                },
+                onRekap = {
+                    layar = LayarDosen.REKAP_KEHADIRAN
+                },
+                onBack = keBeranda,
+                onProfileClick = keProfil
+            )
+
+            tujuan == LayarDosen.EDIT_MATKUL &&
+                    course != null &&
+                    matkul != null -> TambahMatkul(
+                username = user.name,
+                judul = "Edit Mata Kuliah",
+                kodeAwal = course.code,
+                namaAwal = course.name,
+                ruanganAwal = matkul.ruang,
+                // ruangan lama tetap ditampilkan walaupun belum punya fingerprint, supaya pilihan awal tidak hilang
+                daftarRuangan = (ruanganBisaDipakai + d.rooms.filter { it.id == course.roomId }).distinct().map { it.name },
+                kodeTerpakai = d.courses
+                    .filter { it.id != course.id }
+                    .map { it.code },
+                onSimpan = { kode, nama, ruangan ->
+                    val roomId = d.rooms.first { it.name == ruangan }.id
+
+                    ubah {
+                        container.courseRepository.updateCourse(
+                            course.copy(
+                                code = kode,
+                                name = nama,
+                                roomId = roomId
+                            )
+                        )
+                    }
+
+                    layar = LayarDosen.DETAIL_MATKUL
+                },
+                onHapus = {
+                    ubah { container.courseRepository.deleteCourse(course.id) }
+                    courseIdTerpilih = null
+                    layar = LayarDosen.BERANDA
+                },
+                onBack = keDetail,
+                onProfileClick = keProfil
+            )
+
+            tujuan == LayarDosen.BUKA_SESI && matkul != null -> BukaSesi(
+                username = user.name,
+                daftarMatkul = daftarMatkul,
+                matkulAwal = matkul,
+                onBukaAbsensi = { m, jamMulai, jamSelesai ->
+                    val c = d.courses.first { it.id == m.id }
+                    val sekarang = System.currentTimeMillis()
+
+                    ubah {
+                        container.sessionRepository.openSession(
+                            courseId = c.id,
                             lecturerId = user.uid,
-                            roomId = roomId,
-                            studentIds = emptyList()
+                            roomId = c.roomId,
+                            startAtMs = jamHariIni(jamMulai, sekarang),
+                            endAtMs = jamHariIni(jamSelesai, sekarang)
                         )
-                    )
-                }
+                    }
 
-                layar = LayarDosen.BERANDA
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil
-        )
+                    layar = LayarDosen.BERANDA
+                },
+                onBack = keDetail,
+                onProfileClick = keProfil
+            )
 
-        layar == LayarDosen.DETAIL_MATKUL && matkul != null -> DetailMatkul(
-            username = user.name,
-            matkul = matkul,
-            riwayat = riwayat,
-            statusSesi = statusSesiMatkul,
-            onBukaSesi = {
-                layar = LayarDosen.BUKA_SESI
-            },
-            onKelolaPeserta = {
-                layar = LayarDosen.KELOLA_PESERTA
-            },
-            onEditMatkul = {
-                layar = LayarDosen.EDIT_MATKUL
-            },
-            onRekap = {
-                layar = LayarDosen.REKAP_KEHADIRAN
-            },
-            onBack = keBeranda,
-            onProfileClick = keProfil
-        )
-
-        layar == LayarDosen.EDIT_MATKUL &&
-                course != null &&
-                matkul != null -> TambahMatkul(
-            username = user.name,
-            judul = "Edit Mata Kuliah",
-            kodeAwal = course.code,
-            namaAwal = course.name,
-            ruanganAwal = matkul.ruang,
-            // ruangan lama tetap ditampilkan walaupun belum punya fingerprint, supaya pilihan awal tidak hilang
-            daftarRuangan = (ruanganBisaDipakai + d.rooms.filter { it.id == course.roomId }).distinct().map { it.name },
-            kodeTerpakai = d.courses
-                .filter { it.id != course.id }
-                .map { it.code },
-            onSimpan = { kode, nama, ruangan ->
-                val roomId = d.rooms.first { it.name == ruangan }.id
-
-                ubah {
-                    container.courseRepository.updateCourse(
-                        course.copy(
-                            code = kode,
-                            name = nama,
-                            roomId = roomId
+            tujuan == LayarDosen.KELOLA_PESERTA &&
+                    course != null &&
+                    matkul != null -> KelolaPeserta(
+                username = user.name,
+                matkul = matkul,
+                peserta = pesertaMatkul,
+                daftarMahasiswa = d.semuaMahasiswa.map {
+                    Peserta(it.name, it.nim ?: "-", it.uid)
+                },
+                onTambah = { p ->
+                    ubah {
+                        container.courseRepository.addStudent(
+                            course.id,
+                            p.uid
                         )
-                    )
-                }
+                    }
+                },
+                onHapus = { p ->
+                    ubah {
+                        container.courseRepository.removeStudent(
+                            course.id,
+                            p.uid
+                        )
+                    }
+                },
+                onBack = keDetail,
+                onProfileClick = keProfil
+            )
 
-                layar = LayarDosen.DETAIL_MATKUL
-            },
-            onHapus = {
-                ubah { container.courseRepository.deleteCourse(course.id) }
-                courseIdTerpilih = null
-                layar = LayarDosen.BERANDA
-            },
-            onBack = keDetail,
-            onProfileClick = keProfil
-        )
+            tujuan == LayarDosen.REKAP_KEHADIRAN &&
+                    course != null &&
+                    matkul != null -> RekapKehadiran(
+                username = user.name,
+                matkul = matkul,
+                riwayat = riwayat,
+                catatanUntuk = { p ->
+                    val sesi = d.sessions[course.id].orEmpty()
+                        .firstOrNull { it.id == p.sessionId }
 
-        layar == LayarDosen.BUKA_SESI && matkul != null -> BukaSesi(
-            username = user.name,
-            daftarMatkul = daftarMatkul,
-            matkulAwal = matkul,
-            onBukaAbsensi = { m, jamMulai, jamSelesai ->
-                val c = d.courses.first { it.id == m.id }
-                val sekarang = System.currentTimeMillis()
+                    val selesai = sesi?.hasEnded(now) ?: true
 
-                ubah {
-                    container.sessionRepository.openSession(
-                        courseId = c.id,
-                        lecturerId = user.uid,
-                        roomId = c.roomId,
-                        startAtMs = jamHariIni(jamMulai, sekarang),
-                        endAtMs = jamHariIni(jamSelesai, sekarang)
-                    )
-                }
+                    d.pesertaDari(course).map { u ->
+                        val a = d.kehadiran(p.sessionId, u.uid)
 
-                layar = LayarDosen.BERANDA
-            },
-            onBack = keDetail,
-            onProfileClick = keProfil
-        )
+                        CatatanKehadiran(
+                            nama = u.name,
+                            nim = u.nim ?: "-",
+                            status = a?.status?.toUi()
+                                ?: if (selesai) AttendanceStatus.Alpa
+                                else AttendanceStatus.BelumAbsen,
+                            manual = a?.method == AttendanceMethod.MANUAL,
+                            uid = u.uid,
+                            keterangan = a?.note,
+                            adaBukti = a?.hasProof == true
+                        )
+                    }
+                },
+                onLihatKeterangan = { p, c ->
+                    buktiTerbuka = BuktiTerbuka(p.sessionId, c.uid, "${c.status.label} · ${c.nama}", c.keterangan, c.adaBukti)
+                },
+                rekapMahasiswa = rekapMahasiswa,
+                onHapusPertemuan = { p -> ubah { container.sessionRepository.deleteSession(p.sessionId) } },
+                buatCsv = { buatCsvRekap(course, d.sessions[course.id].orEmpty().filter { it.hasEnded(now) }, d) },
+                namaFileCsv = "rekap-${course.code}-${formatTanggalFile(now)}.csv",
+                onUbahStatus = { p, uid, status ->
+                    ubah {
+                        container.attendanceRepository.setManualStatus(
+                            p.sessionId,
+                            course.id,
+                            uid,
+                            status.toPresence()
+                        )
+                    }
+                },
+                onBack = keDetail,
+                onProfileClick = keProfil
+            )
 
-        layar == LayarDosen.KELOLA_PESERTA &&
-                course != null &&
-                matkul != null -> KelolaPeserta(
-            username = user.name,
-            matkul = matkul,
-            peserta = pesertaMatkul,
-            daftarMahasiswa = d.semuaMahasiswa.map {
-                Peserta(it.name, it.nim ?: "-", it.uid)
-            },
-            onTambah = { p ->
-                ubah {
-                    container.courseRepository.addStudent(
-                        course.id,
-                        p.uid
-                    )
-                }
-            },
-            onHapus = { p ->
-                ubah {
-                    container.courseRepository.removeStudent(
-                        course.id,
-                        p.uid
-                    )
-                }
-            },
-            onBack = keDetail,
-            onProfileClick = keProfil
-        )
-
-        layar == LayarDosen.REKAP_KEHADIRAN &&
-                course != null &&
-                matkul != null -> RekapKehadiran(
-            username = user.name,
-            matkul = matkul,
-            riwayat = riwayat,
-            catatanUntuk = { p ->
-                val sesi = d.sessions[course.id].orEmpty()
-                    .firstOrNull { it.id == p.sessionId }
-
-                val selesai = sesi?.hasEnded(now) ?: true
-
-                d.pesertaDari(course).map { u ->
-                    val a = d.kehadiran(p.sessionId, u.uid)
-
-                    CatatanKehadiran(
-                        nama = u.name,
-                        nim = u.nim ?: "-",
-                        status = a?.status?.toUi()
-                            ?: if (selesai) AttendanceStatus.Alpa
-                            else AttendanceStatus.BelumAbsen,
-                        manual = a?.method == AttendanceMethod.MANUAL,
-                        uid = u.uid,
-                        keterangan = a?.note,
-                        adaBukti = a?.hasProof == true
-                    )
-                }
-            },
-            onLihatKeterangan = { p, c ->
-                buktiTerbuka = BuktiTerbuka(p.sessionId, c.uid, "${c.status.label} · ${c.nama}", c.keterangan, c.adaBukti)
-            },
-            rekapMahasiswa = rekapMahasiswa,
-            onHapusPertemuan = { p -> ubah { container.sessionRepository.deleteSession(p.sessionId) } },
-            buatCsv = { buatCsvRekap(course, d.sessions[course.id].orEmpty().filter { it.hasEnded(now) }, d) },
-            namaFileCsv = "rekap-${course.code}-${formatTanggalFile(now)}.csv",
-            onUbahStatus = { p, uid, status ->
-                ubah {
-                    container.attendanceRepository.setManualStatus(
-                        p.sessionId,
-                        course.id,
-                        uid,
-                        status.toPresence()
-                    )
-                }
-            },
-            onBack = keDetail,
-            onProfileClick = keProfil
-        )
-
-        else -> BerandaDosen(
-            username = user.name,
-            sesiAktif = sesiAktif,
-            daftarMatkul = daftarMatkul,
-            onPantauSesi = {
-                pantauSessionId = sesiBerjalan?.id
-                layar = LayarDosen.PANTAU_SESI
-            },
-            onTambahMatkul = {
-                layar = LayarDosen.TAMBAH_MATKUL
-            },
-            onMatkulClick = {
-                courseIdTerpilih = it.id
-                layar = LayarDosen.DETAIL_MATKUL
-            },
-            onProfileClick = keProfil
-        )
+            else -> BerandaDosen(
+                username = user.name,
+                sesiAktif = sesiAktif,
+                daftarMatkul = daftarMatkul,
+                onPantauSesi = {
+                    pantauSessionId = sesiBerjalan?.id
+                    layar = LayarDosen.PANTAU_SESI
+                },
+                onTambahMatkul = {
+                    layar = LayarDosen.TAMBAH_MATKUL
+                },
+                onMatkulClick = {
+                    courseIdTerpilih = it.id
+                    layar = LayarDosen.DETAIL_MATKUL
+                },
+                onProfileClick = keProfil
+            )
+        }
     }
 }
 
@@ -607,7 +612,7 @@ private fun SesiBerakhir(
     onProfileClick: () -> Unit
 ) {
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Sesi Berakhir", judul, username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(

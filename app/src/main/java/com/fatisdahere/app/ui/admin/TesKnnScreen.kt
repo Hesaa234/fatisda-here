@@ -331,7 +331,7 @@ fun TesKnnScreen(
     }
 
     Scaffold(
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Tes KNN & Kalibrasi", "Uji posisi dan setel batas", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -666,7 +666,7 @@ private fun KartuScan(
     val mono = FontFamily.Monospace
     val ok = lolos(e, rssiMin, distanceMax)
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = BentukField,
         color = PageBackground,
         border = BorderStroke(1.dp, (if (ok) StatusSuccess else StatusDanger).copy(alpha = 0.4f)),
         modifier = Modifier.fillMaxWidth()
@@ -697,7 +697,7 @@ private fun KartuScan(
                     fontSize = 13.sp,
                     color = TextPrimary
                 )
-                Text("3 tetangga terdekat:", fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f))
+                Text("3 tetangga terdekat:", fontSize = 12.sp, color = TextMuted)
                 e.neighbors.forEachIndexed { i, n ->
                     Text(
                         "${i + 1}. ${fingerprint.roomName(n.roomId)} [${n.label}]  d=${fmt(n.distance)}",
@@ -740,7 +740,7 @@ private fun KartuRiwayat(
     val sesuai = (t.test.position == TestPosition.DALAM) == ok
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = BentukItem,
         colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
@@ -792,7 +792,7 @@ private fun Penyetel(
                     onClick = aksi,
                     enabled = enabled,
                     modifier = Modifier.weight(1f).height(40.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = BentukField,
                     contentPadding = PaddingValues(0.dp)
                 ) { Text(teks, fontWeight = FontWeight.Bold, color = UnsBlue) }
             }
@@ -810,9 +810,9 @@ private fun Pilihan(opsi: List<String>, terpilih: Int, onPilih: (Int) -> Unit, e
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(BentukField)
                     .clickable(enabled = enabled) { onPilih(i) },
-                shape = RoundedCornerShape(12.dp),
+                shape = BentukField,
                 color = if (aktif) UnsBlue else SurfaceWhite,
                 border = BorderStroke(1.dp, if (aktif) UnsBlue else TextPrimary.copy(alpha = 0.3f))
             ) {
@@ -826,7 +826,7 @@ private fun Pilihan(opsi: List<String>, terpilih: Int, onPilih: (Int) -> Unit, e
 
 @Composable
 private fun KotakAngka(label: String, angka: String, persen: String, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(12.dp), color = PageBackground) {
+    Surface(modifier, shape = BentukField, color = PageBackground) {
         Column(
             Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -834,7 +834,7 @@ private fun KotakAngka(label: String, angka: String, persen: String, modifier: M
         ) {
             Text(persen, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = UnsBlue)
             Text(angka, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-            Text(label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+            Text(label, fontSize = 12.sp, color = TextMuted, textAlign = TextAlign.Center)
         }
     }
 }

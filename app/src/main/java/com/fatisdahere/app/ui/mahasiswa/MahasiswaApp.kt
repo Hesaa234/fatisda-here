@@ -319,87 +319,101 @@ fun MahasiswaApp(user: AppUser, container: AppContainer, onLogout: () -> Unit) {
         d.sessions[c.id].orEmpty().filter { it.isOpen(now) }.map { c to it }
     }.minByOrNull { it.second.startAtMs }
 
+    val ringkasanSemua = RingkasanKehadiran.dari(
+        d.courses.flatMap { c ->
+            d.sessions[c.id].orEmpty().filter { it.hasEnded(now) }.map { s ->
+                AttendanceRecord(0, d.myAttendance[s.id]?.status?.toUi() ?: AttendanceStatus.Alpa, "", "")
+            }
+        }
+    )
+
     val course = d.courses.firstOrNull { it.id == courseIdTerpilih }
     val sesi = sesiAbsen
 
-    when {
-        layar == LayarMahasiswa.PROFILE -> StudentProfileScreen(
-            name = user.name,
-            nim = user.nim ?: "-",
-            email = user.email,
-            onLogoutClick = onLogout,
-            onBack = keHome
-        )
-
-        layar == LayarMahasiswa.COURSE_DETAIL && course != null -> {
-            val daftarSesi = d.sessions[course.id].orEmpty()
-            val terbuka = daftarSesi.firstOrNull { it.isOpen(now) }
-            val riwayat = daftarSesi.mapIndexedNotNull { i, s ->
-                if (!s.hasEnded(now)) return@mapIndexedNotNull null
-                AttendanceRecord(
-                    meeting = i + 1,
-                    status = d.myAttendance[s.id]?.status?.toUi() ?: AttendanceStatus.Alpa,
-                    room = d.namaRuang(s.roomId),
-                    time = formatHariTanggalJam(s.startAtMs)
-                )
-            }.reversed()
-            val statusSekarang = when {
-                terbuka != null -> d.myAttendance[terbuka.id]?.status?.toUi() ?: AttendanceStatus.BelumAbsen
-                else -> riwayat.firstOrNull()?.status ?: AttendanceStatus.BelumAbsen
-            }
-            val uiHeader = if (terbuka != null) uiSesi(course, terbuka) else uiCourse(course)
-
-            StudentCourseDetailScreen(
-                userName = user.name,
-                session = uiHeader,
-                currentStatus = statusSekarang,
-                canAbsen = terbuka != null && !d.myAttendance.containsKey(terbuka.id),
-                history = riwayat,
-                onAbsenClick = { mulaiAbsen(uiHeader) },
-                onBack = keHome,
-                sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id),
-                ringkasan = RingkasanKehadiran.dari(riwayat),
-                onProfileClick = keProfil
+    TransisiLayar(
+        target = layar,
+        kedalaman = { when (it) { LayarMahasiswa.HOME -> 0; LayarMahasiswa.PROFILE, LayarMahasiswa.COURSE_DETAIL -> 1; LayarMahasiswa.SCANNING -> 2; LayarMahasiswa.RESULT -> 3 } }
+    ) { tujuan ->
+        when {
+            tujuan == LayarMahasiswa.PROFILE -> StudentProfileScreen(
+                name = user.name,
+                nim = user.nim ?: "-",
+                email = user.email,
+                onLogoutClick = onLogout,
+                onBack = keHome
             )
-        }
 
-        layar == LayarMahasiswa.SCANNING && sesi != null -> ScanningScreen(
-            userName = user.name,
-            session = sesi,
-            wifiName = container.fingerprint.ssid,
-            proses = proses,
-            onKirim = { status, izin -> kirimAbsen(sesi, status, izin) },
-            onProfileClick = keProfil,
-            onBack = keHome
-        )
+            tujuan == LayarMahasiswa.COURSE_DETAIL && course != null -> {
+                val daftarSesi = d.sessions[course.id].orEmpty()
+                val terbuka = daftarSesi.firstOrNull { it.isOpen(now) }
+                val riwayat = daftarSesi.mapIndexedNotNull { i, s ->
+                    if (!s.hasEnded(now)) return@mapIndexedNotNull null
+                    AttendanceRecord(
+                        meeting = i + 1,
+                        status = d.myAttendance[s.id]?.status?.toUi() ?: AttendanceStatus.Alpa,
+                        room = d.namaRuang(s.roomId),
+                        time = formatHariTanggalJam(s.startAtMs)
+                    )
+                }.reversed()
+                val statusSekarang = when {
+                    terbuka != null -> d.myAttendance[terbuka.id]?.status?.toUi() ?: AttendanceStatus.BelumAbsen
+                    else -> riwayat.firstOrNull()?.status ?: AttendanceStatus.BelumAbsen
+                }
+                val uiHeader = if (terbuka != null) uiSesi(course, terbuka) else uiCourse(course)
 
-        layar == LayarMahasiswa.RESULT && sesi != null && hasil != null -> {
-            val h = hasil!!
-            ResultScreen(
+                StudentCourseDetailScreen(
+                    userName = user.name,
+                    session = uiHeader,
+                    currentStatus = statusSekarang,
+                    canAbsen = terbuka != null && !d.myAttendance.containsKey(terbuka.id),
+                    history = riwayat,
+                    onAbsenClick = { mulaiAbsen(uiHeader) },
+                    onBack = keHome,
+                    sudahAbsen = terbuka != null && d.myAttendance.containsKey(terbuka.id),
+                    ringkasan = RingkasanKehadiran.dari(riwayat),
+                    onProfileClick = keProfil
+                )
+            }
+
+            tujuan == LayarMahasiswa.SCANNING && sesi != null -> ScanningScreen(
                 userName = user.name,
                 session = sesi,
-                selectedType = h.status,
-                state = h.state,
-                message = h.message,
-                onRetryClick = { mulaiAbsen(sesi) },
-                onDoneClick = keHome,
-                bisaCobaLagi = h.bisaCobaLagi,
-                onBack = keHome,
-                onProfileClick = keProfil
+                wifiName = container.fingerprint.ssid,
+                proses = proses,
+                onKirim = { status, izin -> kirimAbsen(sesi, status, izin) },
+                onProfileClick = keProfil,
+                onBack = keHome
+            )
+
+            tujuan == LayarMahasiswa.RESULT && sesi != null && hasil != null -> {
+                val h = hasil!!
+                ResultScreen(
+                    userName = user.name,
+                    session = sesi,
+                    selectedType = h.status,
+                    state = h.state,
+                    message = h.message,
+                    onRetryClick = { mulaiAbsen(sesi) },
+                    onDoneClick = keHome,
+                    bisaCobaLagi = h.bisaCobaLagi,
+                    onBack = keHome,
+                    onProfileClick = keProfil
+                )
+            }
+
+            else -> StudentHomeScreen(
+                userName = user.name,
+                activeSession = sesiTerbuka?.let { (c, s) -> uiSesi(c, s) },
+                courses = d.courses.map { uiCourse(it) },
+                onAbsenClick = { mulaiAbsen(it) },
+                onCourseClick = {
+                    courseIdTerpilih = it.courseId
+                    layar = LayarMahasiswa.COURSE_DETAIL
+                },
+                onProfileClick = keProfil,
+                sudahAbsen = sesiTerbuka != null && d.myAttendance.containsKey(sesiTerbuka.second.id),
+                ringkasan = ringkasanSemua
             )
         }
-
-        else -> StudentHomeScreen(
-            userName = user.name,
-            activeSession = sesiTerbuka?.let { (c, s) -> uiSesi(c, s) },
-            courses = d.courses.map { uiCourse(it) },
-            onAbsenClick = { mulaiAbsen(it) },
-            onCourseClick = {
-                courseIdTerpilih = it.courseId
-                layar = LayarMahasiswa.COURSE_DETAIL
-            },
-            onProfileClick = keProfil,
-            sudahAbsen = sesiTerbuka != null && d.myAttendance.containsKey(sesiTerbuka.second.id)
-        )
     }
 }

@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -102,47 +104,48 @@ private fun FatisdaApp(container: AppContainer) {
         password = ""
     }
 
-    val u = user
-    if (u == null) {
-        LoginScreen(
-            email = email,
-            password = password,
-            onEmailChange = {
-                email = it
-                error = null
-            },
-            onPasswordChange = {
-                password = it
-                error = null
-            },
-            onLoginClick = {
-                scope.launch {
-                    isLoading = true
+    Crossfade(targetState = user, animationSpec = tween(350), label = "masuk") { u ->
+        if (u == null) {
+            LoginScreen(
+                email = email,
+                password = password,
+                onEmailChange = {
+                    email = it
                     error = null
+                },
+                onPasswordChange = {
+                    password = it
+                    error = null
+                },
+                onLoginClick = {
+                    scope.launch {
+                        isLoading = true
+                        error = null
 
-                    // Email: hapus spasi di awal/akhir dan jadikan huruf kecil.
-                    // Kata sandi TIDAK di-trim karena spasi bisa jadi bagian dari kata sandi.
-                    val cleanEmail = email.trim().lowercase()
+                        // Email: hapus spasi di awal/akhir dan jadikan huruf kecil.
+                        // Kata sandi TIDAK di-trim karena spasi bisa jadi bagian dari kata sandi.
+                        val cleanEmail = email.trim().lowercase()
 
-                    container.authRepository.signIn(cleanEmail, password)
-                        .onSuccess { user = it }
-                        .onFailure { err ->
-                            Log.e("FatisdaAuth", "Login gagal: ${err.message}", err)
-                            error = err.message ?: "Gagal masuk. Periksa email/username dan kata sandi."
-                        }
-                    isLoading = false
-                }
-            },
-            isLoading = isLoading,
-            errorMessage = error,
-            infoMessage = if (AppContainer.PAKAI_FIREBASE) null
-            else "Mode demo: masuk dengan mahasiswa1, dosen1, atau admin (kata sandi bebas)."
-        )
-    } else {
-        when (u.role) {
-            Role.MAHASISWA -> MahasiswaApp(u, container, logout)
-            Role.DOSEN -> DosenApp(u, container, logout)
-            Role.ADMIN -> AdminApp(u, container, logout)
+                        container.authRepository.signIn(cleanEmail, password)
+                            .onSuccess { user = it }
+                            .onFailure { err ->
+                                Log.e("FatisdaAuth", "Login gagal: ${err.message}", err)
+                                error = err.message ?: "Gagal masuk. Periksa email/username dan kata sandi."
+                            }
+                        isLoading = false
+                    }
+                },
+                isLoading = isLoading,
+                errorMessage = error,
+                infoMessage = if (AppContainer.PAKAI_FIREBASE) null
+                else "Mode demo: masuk dengan mahasiswa1, dosen1, atau admin (kata sandi bebas)."
+            )
+        } else {
+            when (u.role) {
+                Role.MAHASISWA -> MahasiswaApp(u, container, logout)
+                Role.DOSEN -> DosenApp(u, container, logout)
+                Role.ADMIN -> AdminApp(u, container, logout)
+            }
         }
     }
 }

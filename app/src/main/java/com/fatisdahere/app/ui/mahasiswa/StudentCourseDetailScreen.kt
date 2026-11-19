@@ -1,14 +1,13 @@
 package com.fatisdahere.app.ui.mahasiswa
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -17,7 +16,6 @@ import androidx.compose.ui.unit.sp
 import com.fatisdahere.app.ui.theme.*
 import com.fatisdahere.app.ui.components.*
 
-/** Ringkasan kehadiran dari pertemuan yang sudah selesai. */
 data class RingkasanKehadiran(val hadir: Int, val izin: Int, val sakit: Int, val alpa: Int) {
     val total get() = hadir + izin + sakit + alpa
     val persenHadir get() = if (total == 0) 0 else Math.round(hadir * 100f / total)
@@ -48,16 +46,25 @@ fun StudentCourseDetailScreen(
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(userName, onProfileClick, onBack) },
+        topBar = {
+            HeaderGradien(
+                judul = session.name,
+                subjudul = "${session.code} · ${session.lecturer}",
+                onBack = onBack,
+                userName = userName,
+                onUserClick = onProfileClick
+            ) {
+                if (ringkasan != null && ringkasan.total > 0) RingkasanDetail(ringkasan)
+            }
+        },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(16.dp)
         ) {
             item {
-                SectionCard {
+                SectionCard(modifier = Modifier.padding(bottom = 20.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Box(Modifier.weight(1f)) { SessionInfo(session) }
                         StatusPill(currentStatus.label, currentStatus.color)
@@ -69,64 +76,55 @@ fun StudentCourseDetailScreen(
                     )
                 }
             }
-            if (ringkasan != null && ringkasan.total > 0) item { KartuRingkasan(ringkasan) }
             item {
-                Text("Riwayat Absensi", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
+                SectionTitle("Riwayat Absensi", Modifier.padding(start = 2.dp, bottom = 12.dp))
             }
             if (history.isEmpty()) item {
-                SectionCard { HelperText("Belum ada pertemuan yang selesai untuk mata kuliah ini.") }
+                KartuKosong("Belum ada pertemuan yang selesai untuk mata kuliah ini.")
             }
-            items(history, key = { it.meeting }) { HistoryCard(it) }
+            itemsIndexed(history, key = { _, r -> r.meeting }) { index, record ->
+                BarisTimeline(
+                    warna = record.status.color,
+                    terisi = record.status != AttendanceStatus.BelumAbsen,
+                    pertama = index == 0,
+                    terakhir = index == history.lastIndex
+                ) {
+                    RiwayatCard(record)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun KartuRingkasan(r: RingkasanKehadiran) {
-    SectionCard("Ringkasan Kehadiran") {
-        Text(
-            "Hadir ${r.hadir} dari ${r.total} pertemuan (${r.persenHadir}%)",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = UnsNavy
+private fun RingkasanDetail(r: RingkasanKehadiran) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        CincinProgres(
+            persen = r.persenHadir,
+            ukuran = 84.dp,
+            warna = Color.White,
+            track = Color.White.copy(alpha = 0.3f),
+            tebal = 9.dp,
+            warnaTeks = Color.White,
+            label = "Hadir"
         )
-        LinearProgressIndicator(
-            progress = r.persenHadir / 100f,
-            modifier = Modifier.fillMaxWidth().height(8.dp),
-            color = StatusSuccess,
-            trackColor = StatusSuccess.copy(alpha = 0.15f)
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusPill("Izin ${r.izin}", AttendanceStatus.Izin.color)
-            StatusPill("Sakit ${r.sakit}", AttendanceStatus.Sakit.color)
-            StatusPill("Alpa ${r.alpa}", AttendanceStatus.Alpa.color)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Hadir ${r.hadir} dari ${r.total} pertemuan", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("Izin ${r.izin} · Sakit ${r.sakit} · Alpa ${r.alpa}", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-private fun HistoryCard(record: AttendanceRecord) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-        elevation = CardDefaults.cardElevation(2.dp),
-        border = BorderStroke(1.dp, record.status.color.copy(alpha = 0.25f))
-    ) {
-        Row(
-            Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Pertemuan ${record.meeting}", fontWeight = FontWeight.Bold, color = UnsNavy)
-                StatusPill(record.status.label, record.status.color)
-            }
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(record.room, fontSize = 13.sp, color = UnsBlue, textAlign = TextAlign.End)
-                Text(record.time, fontSize = 13.sp, color = TextPrimary.copy(alpha = 0.7f), textAlign = TextAlign.End)
-            }
+private fun RiwayatCard(record: AttendanceRecord) {
+    ItemCard {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Pertemuan ${record.meeting}", fontWeight = FontWeight.Bold, color = UnsNavy, fontSize = 15.sp)
+            Text(record.time, fontSize = 12.sp, color = TextMuted)
+            Text(record.room, fontSize = 12.sp, color = UnsBlue, fontWeight = FontWeight.Medium)
         }
+        Spacer(Modifier.width(12.dp))
+        StatusPill(record.status.label, record.status.color)
     }
 }
 

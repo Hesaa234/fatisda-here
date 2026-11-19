@@ -32,20 +32,18 @@ fun PantauSesi(
 
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Pantau Sesi", sesi.judul, username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                SectionCard("Pantau Sesi") {
+                SectionCard {
                     LiveBadge()
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(sesi.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
-                        Spacer(Modifier.height(4.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         InfoRow("Waktu", sesi.waktu)
                         InfoRow("Ruang", sesi.ruang)
                     }
@@ -59,22 +57,11 @@ fun PantauSesi(
                             modifier = Modifier.padding(bottom = 6.dp)
                         )
                     }
-                    // Rincian: Hadir / Izin / Sakit / Belum Absen
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    StatistikBaris(
                         listOf(
                             AttendanceStatus.Hadir, AttendanceStatus.Izin, AttendanceStatus.Sakit, AttendanceStatus.BelumAbsen
-                        ).forEach { s ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "${daftarKehadiran.count { it.status == s }}",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = readableColor(s.color)
-                                )
-                                Text(s.label, fontSize = 12.sp, color = TextPrimary.copy(alpha = 0.7f))
-                            }
-                        }
-                    }
+                        ).map { st -> ItemStat("${daftarKehadiran.count { it.status == st }}", st.label, st.color) }
+                    )
                     HelperText(
                         "$sudahMasuk dari ${daftarKehadiran.size} mahasiswa sudah mengisi absen" +
                             (diperbarui?.let { " · diperbarui $it (otomatis tiap 10 detik)" } ?: "")
@@ -83,7 +70,7 @@ fun PantauSesi(
                 }
             }
             item { SectionTitle("Daftar Kehadiran") }
-            if (daftarKehadiran.isEmpty()) item { HelperText("Belum ada peserta.") }
+            if (daftarKehadiran.isEmpty()) item { KartuKosong("Belum ada peserta.") }
             items(daftarKehadiran) { KartuMahasiswa(it) { onLihatKeterangan(it) } }
         }
     }
@@ -104,7 +91,7 @@ fun PantauSesi(
 
 @Composable
 private fun KartuMahasiswa(m: KehadiranMahasiswa, onLihat: () -> Unit) {
-    ItemCard {
+    ItemCard(inisial = m.nama, warnaInisial = if (m.status == AttendanceStatus.BelumAbsen) TextMuted else readableColor(m.status.color)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(m.nama)
             ItemSubtitle(m.nim)

@@ -52,7 +52,7 @@ fun BukaSesi(
 
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick, onBack) },
+        topBar = { HeaderHalaman("Buka Sesi Absen", "Atur mata kuliah dan jam sesi", username, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -62,7 +62,7 @@ fun BukaSesi(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            SectionCard("Buka Sesi Absen") {
+            SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Mata Kuliah")
                     if (matkulAwal != null) {

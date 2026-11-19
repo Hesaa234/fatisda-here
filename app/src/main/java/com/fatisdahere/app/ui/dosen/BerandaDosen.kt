@@ -29,37 +29,44 @@ fun BerandaDosen(
 ) {
     Scaffold(
         modifier,
-        topBar = { FatisdaTopBar(username, onProfileClick) },
+        topBar = {
+            HeaderGradien(
+                judul = "Halo, ${username.trim().substringBefore(' ').ifBlank { username }}",
+                subjudul = "Dosen · FATISDA Here",
+                userName = username,
+                onUserClick = onProfileClick
+            ) {
+                StatistikHeader(
+                    listOf(
+                        "${daftarMatkul.size}" to "Mata Kuliah",
+                        "${daftarMatkul.sumOf { it.jumlahPeserta }}" to "Peserta",
+                        (if (sesiAktif != null) "1" else "0") to "Sesi Aktif"
+                    )
+                )
+            }
+        },
         containerColor = PageBackground
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (sesiAktif != null) item {
-                SectionCard("Sesi Kelas Aktif") {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = PageBackground)
-                    ) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            LiveBadge()
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(sesiAktif.judul, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
-                                Spacer(Modifier.height(4.dp))
-                                InfoRow("Waktu", sesiAktif.waktu)
-                                InfoRow("Ruang", sesiAktif.ruang)
-                                InfoRow("Hadir", "${sesiAktif.hadir} dari ${sesiAktif.totalMahasiswa} mahasiswa")
-                            }
-                            PrimaryButton("Pantau Sesi", onPantauSesi)
-                        }
-                    }
-                }
+                KartuSesiAktif(
+                    judul = sesiAktif.judul,
+                    keterangan = "Sesi sedang berlangsung",
+                    tombol = "Pantau Sesi",
+                    onClick = onPantauSesi,
+                    baris = listOf(
+                        "${sesiAktif.waktu} · ${sesiAktif.ruang}",
+                        "Hadir ${sesiAktif.hadir} dari ${sesiAktif.totalMahasiswa} mahasiswa"
+                    )
+                )
             }
             item { SectionTitle("Mata Kuliah Saya") }
             item { SecondaryButton("+ Tambah Mata Kuliah", onTambahMatkul) }
-            if (daftarMatkul.isEmpty()) item { HelperText("Belum ada mata kuliah.") }
+            if (daftarMatkul.isEmpty()) item { KartuKosong("Belum ada mata kuliah.") }
             items(daftarMatkul) { matkul -> MatkulCard(matkul) { onMatkulClick(matkul) } }
         }
     }
@@ -67,7 +74,7 @@ fun BerandaDosen(
 
 @Composable
 private fun MatkulCard(matkul: MataKuliah, onClick: () -> Unit) {
-    ItemCard(onClick = onClick) {
+    ItemCard(onClick = onClick, inisial = matkul.kode) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ItemTitle(matkul.judul)
             ItemSubtitle("${matkul.jumlahPeserta} peserta")
