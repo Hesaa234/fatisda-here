@@ -59,6 +59,11 @@ fun StudentHomeScreen(
             item {
                 Text("Mata Kuliah Saya", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = UnsNavy)
             }
+            if (courses.isEmpty()) item {
+                SectionCard {
+                    HelperText("Kamu belum terdaftar di mata kuliah mana pun. Hubungi dosen atau admin untuk didaftarkan.")
+                }
+            }
             items(courses) { CourseCard(it, onClick = { onCourseClick(it) }) }
         }
     }

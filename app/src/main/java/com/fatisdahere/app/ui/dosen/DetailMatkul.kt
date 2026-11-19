@@ -122,6 +122,7 @@ private fun KartuPertemuan(p: Pertemuan) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             ItemTitle("Pertemuan ${p.nomor}")
+            if (p.terjadwal) StatusPill("Terjadwal", UnsBlue)
 
             Text(
                 text = buildAnnotatedString {

@@ -16,7 +16,10 @@ import androidx.compose.ui.unit.sp
 import com.fatisdahere.app.ui.components.*
 import com.fatisdahere.app.ui.theme.*
 
-/** @param message penjelasan tambahan, misalnya alasan absen ditolak */
+/**
+ * @param message penjelasan tambahan, misalnya alasan absen ditolak
+ * @param bisaCobaLagi false kalau mencoba lagi percuma (sudah absen / sesi berakhir): tombol Coba Lagi disembunyikan
+ */
 @Composable
 fun ResultScreen(
     userName: String,
@@ -25,13 +28,16 @@ fun ResultScreen(
     state: ResultState,
     onRetryClick: () -> Unit,
     onDoneClick: () -> Unit,
-    message: String? = null
+    message: String? = null,
+    bisaCobaLagi: Boolean = true,
+    onBack: (() -> Unit)? = null,
+    onProfileClick: () -> Unit = {}
 ) {
     val berhasil = state == ResultState.Verified
     val warna = if (berhasil) StatusSuccess else StatusDanger
 
     Scaffold(
-        topBar = { FatisdaTopBar(userName) },
+        topBar = { FatisdaTopBar(userName, onProfileClick, onBack) },
         containerColor = PageBackground
     ) { padding ->
         Column(
@@ -66,7 +72,7 @@ fun ResultScreen(
                 }
             }
             PrimaryButton("Selesai", onDoneClick)
-            if (!berhasil) SecondaryButton("Coba Lagi", onRetryClick)
+            if (!berhasil && bisaCobaLagi) SecondaryButton("Coba Lagi", onRetryClick)
         }
     }
 }

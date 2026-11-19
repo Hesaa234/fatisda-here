@@ -28,6 +28,8 @@ import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -50,6 +52,27 @@ private const val KNN_TESTS = "knnTests"
 
 /** Batas aman jumlah nilai untuk whereIn (SDK lama membatasi 10). */
 private const val IN_LIMIT = 10
+
+/** Satu batch Firestore maksimal 500 operasi. */
+private const val BATCH_LIMIT = 450
+
+/**
+ * Hapus kehadiran (hasil [kehadiran]) beserta foto buktinya, lalu dokumen [lainnya].
+ * Foto bukti punya id yang sama dengan kehadirannya (sessionId_uid), dan hanya dihapus kalau
+ * hasProof = true: menghapus dokumen yang tidak ada akan ditolak rules dan menggagalkan batch.
+ */
+private suspend fun FirebaseFirestore.hapusKehadiranDan(kehadiran: Query, vararg lainnya: Query) {
+    val dokKehadiran = kehadiran.get().await().documents
+    val refs = dokKehadiran.filter { it.getBoolean("hasProof") == true }
+        .map { collection(PROOFS).document(it.id) } +
+        dokKehadiran.map { it.reference } +
+        lainnya.flatMap { q -> q.get().await().documents.map { it.reference } }
+    refs.chunked(BATCH_LIMIT).forEach { potongan ->
+        val batch = batch()
+        potongan.forEach { batch.delete(it) }
+        batch.commit().await()
+    }
+}
 
 private fun slug(text: String) =
     text.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "data" }
@@ -119,6 +142,10 @@ class FirestoreUserRepository(
         }
     }
 
+    override suspend fun updateUser(user: AppUser) {
+        db.collection(USERS).document(user.uid).set(user.toMap()).await()
+    }
+
     private fun appKedua(): FirebaseApp {
         val nama = "pembuat-akun"
         return FirebaseApp.getApps(context).firstOrNull { it.name == nama }
@@ -178,6 +205,15 @@ class FirestoreCourseRepository(
             .update("studentIds", FieldValue.arrayRemove(studentId))
             .await()
     }
+
+    /** Urutan: data turunan dulu (bukti, kehadiran, sesi), matkul terakhir. */
+    override suspend fun deleteCourse(courseId: String) {
+        db.hapusKehadiranDan(
+            db.collection(ATTENDANCES).whereEqualTo("courseId", courseId),
+            db.collection(SESSIONS).whereEqualTo("courseId", courseId),
+        )
+        db.collection(COURSES).document(courseId).delete().await()
+    }
 }
 
 class FirestoreSessionRepository(
@@ -216,6 +252,28 @@ class FirestoreSessionRepository(
     override suspend fun closeSession(sessionId: String, nowMs: Long) {
         db.collection(SESSIONS).document(sessionId).update("closedAt", ts(nowMs)).await()
     }
+
+    override suspend fun deleteSession(sessionId: String) {
+        db.hapusKehadiranDan(db.collection(ATTENDANCES).whereEqualTo("sessionId", sessionId))
+        db.collection(SESSIONS).document(sessionId).delete().await()
+    }
+
+    override fun listenSessions(courseIds: List<String>, onChange: (List<AttendanceSession>) -> Unit): () -> Unit {
+        val ids = courseIds.distinct()
+        if (ids.isEmpty()) return {}
+        // Satu listener per potongan 10 matkul. onChange baru dipanggil setelah SEMUA potongan
+        // mengirim data pertamanya, supaya daftar awal selalu lengkap.
+        val potongan = ids.chunked(IN_LIMIT)
+        val hasil = mutableMapOf<Int, List<AttendanceSession>>()
+        val listeners: List<ListenerRegistration> = potongan.mapIndexed { i, chunk ->
+            db.collection(SESSIONS).whereIn("courseId", chunk).addSnapshotListener { snap, err ->
+                if (err != null || snap == null) return@addSnapshotListener
+                hasil[i] = snap.documents.mapNotNull { it.toSession() }
+                if (hasil.size == potongan.size) onChange(hasil.values.flatten())
+            }
+        }
+        return { listeners.forEach { it.remove() } }
+    }
 }
 
 class FirestoreAttendanceRepository(
@@ -245,7 +303,15 @@ class FirestoreAttendanceRepository(
         val pesan = generateSequence<Throwable>(e) { it.cause }
             .mapNotNull { it.message }
             .firstOrNull { it.contains("sudah absen") }
-        Result.failure(IllegalStateException(pesan ?: e.message ?: "Gagal menyimpan absen."))
+        // Ditolak rules server: sesi sudah berakhir / belum mulai menurut jam server, atau bukan peserta
+        val ditolak = generateSequence<Throwable>(e) { it.cause }.any { it.message?.contains("PERMISSION_DENIED") == true }
+        Result.failure(
+            IllegalStateException(
+                pesan
+                    ?: if (ditolak) "Absen ditolak server: sesi sudah berakhir atau belum dimulai (menurut jam server), atau kamu bukan peserta matkul ini."
+                    else e.message ?: "Gagal menyimpan absen."
+            )
+        )
     }
 
     override suspend fun proofOf(sessionId: String, studentId: String): Proof? =

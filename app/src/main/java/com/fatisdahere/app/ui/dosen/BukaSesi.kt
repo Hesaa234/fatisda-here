@@ -31,6 +31,7 @@ fun BukaSesi(
     var terpilih by remember { mutableStateOf(matkulAwal) }
     var jamMulai by remember { mutableStateOf(awalMulai) }
     var jamSelesai by remember { mutableStateOf(awalSelesai) }
+    var sudahDitekan by remember { mutableStateOf(false) } // cegah sesi terbuat dua kali
     val context = LocalContext.current
 
     fun pilihJam(awal: String, onPilih: (String) -> Unit) {
@@ -47,7 +48,7 @@ fun BukaSesi(
     val sekarang = jamSekarang()
     val jamValid = jamSelesai > jamMulai // format HH:mm, aman dibandingkan sebagai teks
     val belumLewat = jamSelesai > sekarang
-    val bisaBuka = terpilih != null && jamValid && belumLewat
+    val bisaBuka = terpilih != null && jamValid && belumLewat && !sudahDitekan
 
     Scaffold(
         modifier,
@@ -64,12 +65,17 @@ fun BukaSesi(
             SectionCard("Buka Sesi Absen") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Mata Kuliah")
-                    SelectField(
-                        value = terpilih?.judul,
-                        placeholder = "Pilih mata kuliah",
-                        options = daftarMatkul.map { it.judul },
-                        onSelect = { terpilih = daftarMatkul[it] }
-                    )
+                    if (matkulAwal != null) {
+                        // Dibuka dari halaman detail matkul: mata kuliah sudah pasti, tidak bisa diganti
+                        ClickableField(matkulAwal.judul, "-", onClick = {}, enabled = false)
+                    } else {
+                        SelectField(
+                            value = terpilih?.judul,
+                            placeholder = "Pilih mata kuliah",
+                            options = daftarMatkul.map { it.judul },
+                            onSelect = { terpilih = daftarMatkul[it] }
+                        )
+                    }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FieldLabel("Ruang (otomatis dari matkul)")
@@ -101,8 +107,13 @@ fun BukaSesi(
                         "Yang belum absen saat sesi berakhir tercatat Alpa."
                 )
                 PrimaryButton(
-                    "Buka Absensi",
-                    onClick = { terpilih?.let { onBukaAbsensi(it, jamMulai, jamSelesai) } },
+                    if (sudahDitekan) "Membuka..." else "Buka Absensi",
+                    onClick = {
+                        terpilih?.let {
+                            sudahDitekan = true
+                            onBukaAbsensi(it, jamMulai, jamSelesai)
+                        }
+                    },
                     enabled = bisaBuka
                 )
             }

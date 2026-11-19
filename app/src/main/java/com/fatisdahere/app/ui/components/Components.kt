@@ -436,6 +436,19 @@ fun pesanGalat(e: Throwable): String {
 /** Isi halaman profil, sama untuk mahasiswa, dosen, dan admin. fields = (label, nilai). */
 @Composable
 fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit, padding: PaddingValues) {
+    var konfirmasiKeluar by remember { mutableStateOf(false) }
+    if (konfirmasiKeluar) {
+        ConfirmDialog(
+            title = "Keluar dari akun?",
+            text = "Kamu perlu login lagi untuk masuk ke aplikasi.",
+            confirmText = "Log Out",
+            onConfirm = {
+                konfirmasiKeluar = false
+                onLogoutClick()
+            },
+            onDismiss = { konfirmasiKeluar = false }
+        )
+    }
     Column(
         Modifier.fillMaxSize().padding(padding).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -461,6 +474,6 @@ fun ProfileContent(fields: List<Pair<String, String>>, onLogoutClick: () -> Unit
                 }
             }
         }
-        DangerButton("Log Out", onLogoutClick)
+        DangerButton("Log Out", { konfirmasiKeluar = true })
     }
 }
